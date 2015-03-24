@@ -18,18 +18,18 @@ class NystromInputs {
 		int samples;
 
 		// Overloaded constructor (this one takes both rank and samples)
-		NystromlInputs(int _rank, int _samples)
+		NystromInputs(int _rank, int _samples)
 			:
-				rank(_rank)
-				samples(_samples);
-		{}
+				rank(_rank),
+				samples(_samples)
+		{};
 		
 		// Overloaded constructor (takes just rank, samples = rank)
 		NystromInputs(int _rank)
 			:
-				rank(_rank)
-				samples(_rank);
-		{}
+				rank(_rank),
+				samples(_rank)
+		{};
 
 
 }; // class
