@@ -62,14 +62,16 @@ public:
    * Performs a matrix vector multiply. User must create weight
 	 * vector and allocate space for the result of the multiply
    */
-	DistMatrix<double> matvec(DistMatrix<double>& weights); //TODO
+	//DistMatrix<double> matvec(DistMatrix<double>& weights); //TODO
+	void matvec(DistMatrix<double>& weights); //TODO
 
 	/*
 	 * Applies the inverse to a vector and returns the output. As
 	 * with matvec, user must create rhs and allocate memory for 
 	 * the result
 	 */
-	DistMatrix<double> appinv(DistMatrix<double>& rhs); //TODO
+	//DistMatrix<double> appinv(DistMatrix<double>& rhs); //TODO
+	void appinv(DistMatrix<double>& rhs); //TODO
 
 private:
 
@@ -139,16 +141,16 @@ NystromAlg::~NystromAlg(){
 void NystromAlg::decomp(){
 		if (!dcmp_flag){
 			// Random sample of size nystrom_samples
-			std::vector<Int> smpIdx();	
+			//std::vector<Int> smpIdx();	
 			
 			// Fill with kernel values
-			Matrix<double> K_mm(nystrom_samples,nystrom_samples,*g);
+			//Matrix<double> K_mm(nystrom_samples,nystrom_samples,*g);
 
 
 			// Take SVD of subsampled matrix
-			Matrix<double> dummy(*g);
-			Matrix<double> s(*g);
-			SVD(K_mm,dummy,s);
+			//Matrix<double> dummy(*g);
+			//Matrix<double> s(*g);
+			//SVD(K_mm,dummy,s);
 
 			//TODO Do we need to do this?
 			// Sort singular values, store permutation
@@ -169,13 +171,13 @@ void NystromAlg::orthog(){
 
 }
 
-DistMatrix<double> NystromAlg::matvec(DistMatrix<double>& weights){
+void NystromAlg::matvec(DistMatrix<double>& weights){
 
-
-
+	
+	
 }
 
-DistMatrix<double> NystromAlg::appinv(DistMatrix<double>& rhs){
+void NystromAlg::appinv(DistMatrix<double>& rhs){
 
 
 
