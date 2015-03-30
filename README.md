@@ -1,4 +1,4 @@
 nystrom_petsc
 =============
 
-Implements nystrom code with the PETSC library
+Implements nystrom code with the Elemental library
