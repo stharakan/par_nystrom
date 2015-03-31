@@ -1,5 +1,5 @@
-#include /usr/local/conf/ElVars
-include $(WORK)/downloads/Elemental/build/conf/ElVars
+include /usr/local/conf/ElVars
+#include $(WORK)/downloads/Elemental/build/conf/ElVars
 CPP_FLAGS = -openmp
 KNN_INCS =  -I$(KNN_DIR)/generator/ \
             -I$(KNN_DIR)/include/ \
@@ -37,6 +37,9 @@ $(MAIN_OBJ) : $(MAIN_SRC) $(DEPS) $(GKERNEL_BIN)
 
 $(GKERNEL_OBJ) : $(GKERNEL_SRC) $(GKERNEL_DEPS)
 	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(GKERNEL_SRC) $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
+
+test_matvec : matvec.cpp
+	$(CXX) $(EL_COMPILE_FLAGS) matvec.cpp $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
 clean:
 	rm *.o
