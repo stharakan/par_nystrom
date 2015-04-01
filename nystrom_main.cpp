@@ -1,7 +1,9 @@
 
 #include "nystrom_alg.hpp"
+#include <string>
 
 using namespace El;
+using std::string;
 
 NystromAlg::NystromAlg(DistMatrix<double>* _refData, KernelInputs& _kernel_inputs, NystromInputs& _nystrom_inputs,Grid* _g, GaussKernel _gKernel):
 	refData(_refData),
@@ -65,10 +67,10 @@ void NystromAlg::decomp(){
 			if(mpi::WorldRank() == 0){
 				std::vector<int> _smpIdx;
 				randperm(nystrom_samples,ntrain,_smpIdx);
-				std::cout << "Sample idx" << std::endl;
+				//std::cout << "Sample idx" << std::endl;
 				for (int i=0;i<nystrom_samples;i++){
 					smpIdx[i] = _smpIdx[i];
-					std::cout << _smpIdx[i] << std::endl;
+					//std::cout << _smpIdx[i] << std::endl;
 				}
 				_smpIdx.clear();
 			}
@@ -79,11 +81,12 @@ void NystromAlg::decomp(){
 			// Sample from data
 			DistMatrix<double> Xsub(*g);
 			GetSubmatrix(*ptrX,d_idx,smpIdx,Xsub); 
-			Print(Xsub,"X_mn");	
+			//Print(Xsub,"X_mn");	
+			
 			// Fill K_mm with kernel values 
 			DistMatrix<double> K_mm(nystrom_samples,nystrom_samples,*g);
 			gKernel.SelfKernel(Xsub, K_mm);
-			Print(K_mm,"K_mm");
+			//Print(K_mm,"K_mm");
 			
 			// Take Eigendecomp of subsampled matrix
 			auto mmCopy(K_mm);
@@ -233,18 +236,73 @@ void NystromAlg::appinv(DistMatrix<double>& rhs, DistMatrix<double>& x){
 
 int main(int argc, char* argv []){
 	Initialize(argc,argv);
-	Int ntrain = 20;
-	Int dim = 10;
 	
 	int mpicomms = mpi::Size(mpi::COMM_WORLD);
-	std::cout << "Creating grid on " << mpicomms << " mpi tasks"<<std::endl;
+	if (mpi::WorldRank() == 0){
+		std::cout << "Creating grid on " << mpicomms << " mpi tasks"<<std::endl;
+	}
 	Grid grid(mpi::COMM_WORLD);
 
+	// ----- INPUTS  ------ //
+	// Training data (need this)
+	const string datadir   = Input<string>("--dir","data directory" );
+	const string trdataloc = Input<string>("--trdata","training data file");
+	const string trlabloc  = Input<string>("--trlabs","training labels file");
+	const Int ntrain       = Input("--ntrain","# of training pts",2000);
+	const Int dim          = Input("--dim","dimension of data",20);
+
+	// Kernel param
+	const double sigma     = Input("--sigma","kernel bandwidth", 1.0);
+
+	// Nystrom params
+	int nyst_rank          = Input("--rank","Nystrom rank",min(256,ntrain));
+	int nyst_samp          = Input("--samp","Nystrom rank",min(nyst_rank*2,ntrain));
+
+	// Test data (can be null)
+	const string tedataloc = Input("--tedata","test data file","");
+	const string telabloc  = Input("--telabs","test labels file","");
+	const Int ntest        = Input("--ntest","# of training pts",0);
+	
+	// Finish up with inputs
+	ProcessInput();
+	PrintInputReport();
+
+	// Get proc id in case we need it later
+	const int proc = mpi::WorldRank();
+
+	// ---- COMPUTATION ---- ///
 	try{
 		//std::cout << "Initializing data" <<std::endl;
 		DistMatrix<double> refData(dim,ntrain,grid);
 
 		//std::cout << "Loading data" <<std::endl;
+		// Read data
+		DistMatrix<double> Xtrain(dim,ntrain,grid);
+		string trdata = datadir;
+		trdata.append(trdataloc);
+		Read(Xtrain,trdata,BINARY_FLAT);
+
+		// Read labels
+		DistMatrix<double,VR,STAR> Ytrain(ntrain,1,grid);
+		string trlab = datadir;
+		trlab.append(trlabloc);
+		Read(Ytrain,trlab,BINARY_FLAT);
+
+		// Do we need to load test data?
+		if(tedataloc.compare("") != 0 && telabloc.compare("") != 0){
+			// Read data
+			DistMatrix<double> Xtest(dim,ntest,grid); 
+			string tedata = datadir;
+			tedata.append(tedataloc);
+			Read(Xtest,tedata,BINARY_FLAT);
+
+			// Read labels
+			DistMatrix<double,VR,STAR> Ytest(ntest,1,grid);
+			string telab = datadir;
+			telab.append(telabloc);
+			Read(Ytest,telab,BINARY_FLAT);
+		}
+		
 		//Uniform(*refData,ntrain,dim);
 		for(Int i=0;i<dim;i++){
 			for(Int j =0;j<ntrain;j++){
@@ -253,14 +311,12 @@ int main(int argc, char* argv []){
 			}
 		}
 	
-		Print(refData);
-
 		//std::cout << "Loading kernel params" <<std::endl;
 		KernelInputs kernel_inputs;
-		kernel_inputs.bandwidth = 10;
+		kernel_inputs.bandwidth = sigma;
 
 		//std::cout <<"Loading nystrom params" <<std::endl;
-		NystromInputs nystrom_inputs(6);
+		NystromInputs nystrom_inputs(nyst_rank,nyst_samp);
   
 		mpi::Barrier(mpi::COMM_WORLD);
 		//std::cout << "Making kernel class" <<std::endl;
@@ -286,48 +342,6 @@ int main(int argc, char* argv []){
 		ans.Empty();
 		nyst.appinv(test_vec,ans);
 	
-		/*	
-		// Trying to write kernel business
-		DistMatrix<double> A(grid);
-		int height = 4; int width = 4;
-		Uniform(A,height,width);
-		Print(A, "Data");
-
-		DistMatrix<double> K(width,width,grid);
-		Fill(K,0.0);
-		Herk(UPPER,NORMAL, -2.0,A, 1.0,K);
-
-		auto elem_sqr = [](double x){return x*x;};
-		EntrywiseMap(A,function<double(double)> (elem_sqr));
-		Print(A,"Ptwise sqr data");
-			
-		DistMatrix<double,VR,STAR> ones(width,1,grid);
-		Fill(ones,1.0);
-		
-		DistMatrix<double,VR,STAR> norms(height,1,grid);
-		Fill(norms,0.0);
-
-		Gemv(NORMAL, 1.0,A,ones, 1.0,norms);
-		Print(norms, "norms");
-		
-		// Need to combine it all back
-		ones.Resize(height,1);
-		Fill(ones,1.0);
-		Print(ones,"ones");
-		Her2(UPPER, 1.0,ones,norms, K);
-		auto elem_sqrt = [](double x){return sqrt(x);};
-		EntrywiseMap(K,function<double(double)> (elem_sqrt));
-
-		Print(K,"unexponentiated kernel");
-		
-		auto elem_exp = [](double x){return exp(x);};
-		Scale(-1.0,K);
-		EntrywiseMap(K,function<double(double)>(elem_exp));
-		Print(K,"final kernel (upper)");
-		*/
-
-
-		//Print(A);
 	}
 	catch(exception& e){ ReportException(e); }
 	Finalize();
