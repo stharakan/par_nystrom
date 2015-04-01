@@ -68,6 +68,7 @@ void NystromAlg::decomp(){
 				std::cout << "Sample idx" << std::endl;
 				for (int i=0;i<nystrom_samples;i++){
 					smpIdx[i] = _smpIdx[i];
+					std::cout << _smpIdx[i] << std::endl;
 				}
 				_smpIdx.clear();
 			}
@@ -77,7 +78,7 @@ void NystromAlg::decomp(){
 			
 			// Sample from data
 			DistMatrix<double> Xsub(*g);
-			GetSubmatrix(*ptrX,d_dx,smpIdx,Xsub); 
+			GetSubmatrix(*ptrX,d_idx,smpIdx,Xsub); 
 			Print(Xsub,"X_mn");	
 			// Fill K_mm with kernel values 
 			DistMatrix<double> K_mm(nystrom_samples,nystrom_samples,*g);
@@ -251,7 +252,9 @@ int main(int argc, char* argv []){
 				refData.Set(i,j, (double) (i+j));
 			}
 		}
-		
+	
+		Print(refData);
+
 		//std::cout << "Loading kernel params" <<std::endl;
 		KernelInputs kernel_inputs;
 		kernel_inputs.bandwidth = 10;

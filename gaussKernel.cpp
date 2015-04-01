@@ -20,7 +20,7 @@ void GaussKernel::SelfDists(DistMatrix<double>& data, DistMatrix<double>& dists)
 	Int ntrain = data.Width(); 
 
 	// Check the dimensions
-	if (dim != dists.Height() || ntrain != dists.Width()){ 
+	if (ntrain != dists.Height() || ntrain != dists.Width()){ 
 		if (mpi::WorldRank() == 0){
 			std::cout << "COMP_SELFDISTS error: dist matrix was not initialized correctly!!!" << std::endl;
 		}
