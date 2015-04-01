@@ -12,8 +12,8 @@ NystromAlg::NystromAlg(DistMatrix<double>* _refData, KernelInputs& _kernel_input
 {
 	ptrX = refData;
 	ptrY = refData;
-	ntrain          = refData->Height();
-	dim             = refData->Width();
+	dim             = refData->Height();
+	ntrain          = refData->Width(); 
 	dcmp_flag       = false;
 	orth_flag       = false;
 	nystrom_rank    = nystrom_inputs.rank;
@@ -67,7 +67,6 @@ void NystromAlg::decomp(){
 				randperm(nystrom_samples,ntrain,_smpIdx);
 				std::cout << "Sample idx" << std::endl;
 				for (int i=0;i<nystrom_samples;i++){
-					std::cout << _smpIdx[i] << std::endl;
 					smpIdx[i] = _smpIdx[i];
 				}
 				_smpIdx.clear();
@@ -76,35 +75,14 @@ void NystromAlg::decomp(){
 			//Send vector to everybody else
 			mpi::Broadcast(&smpIdx[0], nystrom_samples, 0, mpi::COMM_WORLD);
 			
-			//int A[4] = {1,0,0,1};
-			//std::vector<double> A_vec(A,A+4);
-			//if(mpi::WorldRank() ==0){
-			//	for (int i=0; i<A_vec.size();i++){
-			//		std::cout <<A_vec[i]<<std::endl;
-			//	}
-			//}
-			
 			// Sample from data
 			DistMatrix<double> Xsub(*g);
-			if(mpi::WorldRank() ==0){
-				std::cout << "Full idx (dim)" <<std::endl;
-				for(int i =0;i<d_idx.size();i++){
-					std::cout << d_idx[i] <<std::endl;
-				}
-			}
-			GetSubmatrix(*ptrX,smpIdx,d_idx,Xsub);
+			GetSubmatrix(*ptrX,d_dx,smpIdx,Xsub); 
 			Print(Xsub,"X_mn");	
 			// Fill K_mm with kernel values 
 			DistMatrix<double> K_mm(nystrom_samples,nystrom_samples,*g);
 			gKernel.SelfKernel(Xsub, K_mm);
 			Print(K_mm,"K_mm");
-			//fill with rands for now //TODO take out
-			//Uniform(K_mm,nystrom_samples,nystrom_samples,0.25,0.25);
-			//DistMatrix<double> mmCopy(*g);
-			//FillDiagonal(K_mm,0.5);
-			//Copy(K_mm,mmCopy);
-			//AdjointAxpy(1.0,mmCopy,K_mm);
-			//mmCopy.Empty();
 			
 			// Take Eigendecomp of subsampled matrix
 			auto mmCopy(K_mm);
@@ -113,14 +91,6 @@ void NystromAlg::decomp(){
 			HermitianEig(UPPER,mmCopy,Lmm,Umm,DESCENDING);
 			mmCopy.Empty();
 
-			// This is just because we cant read yet //TODO take out
-			//double minL = Min(Lmm).value;
-			//if(minL < 0.0){
-			//	DistMatrix<double> Lcorr(nystrom_samples,1,*g);
-			//	Fill(Lcorr,1.01);
-			//	Axpy(-minL, Lcorr, Lmm);
-			//}
-			
 			// Truncate
 			GetSubmatrix(Umm,l_idx,s_idx,U);
 			GetSubmatrix(Lmm,s_idx,dummy_idx,L);
@@ -271,12 +241,12 @@ int main(int argc, char* argv []){
 
 	try{
 		//std::cout << "Initializing data" <<std::endl;
-		DistMatrix<double> refData(ntrain,dim,grid);
+		DistMatrix<double> refData(dim,ntrain,grid);
 
 		//std::cout << "Loading data" <<std::endl;
 		//Uniform(*refData,ntrain,dim);
-		for(Int i=0;i<ntrain;i++){
-			for(Int j =0;j<dim;j++){
+		for(Int i=0;i<dim;i++){
+			for(Int j =0;j<ntrain;j++){
 				//std::cout << i << " " << j << std::endl;
 				refData.Set(i,j, (double) (i+j));
 			}

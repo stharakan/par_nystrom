@@ -16,11 +16,11 @@ void GaussKernel::SelfKernel(DistMatrix<double>& data, DistMatrix<double>& K){
 		
 void GaussKernel::SelfDists(DistMatrix<double>& data, DistMatrix<double>& dists){
 	// Get parameters of the data
-	Int height = data.Height();
-	Int width = data.Width();
+	Int dim = data.Height(); 
+	Int ntrain = data.Width(); 
 
 	// Check the dimensions
-	if (height != dists.Height() || height != dists.Width()){
+	if (dim != dists.Height() || ntrain != dists.Width()){ 
 		if (mpi::WorldRank() == 0){
 			std::cout << "COMP_SELFDISTS error: dist matrix was not initialized correctly!!!" << std::endl;
 		}
@@ -31,7 +31,7 @@ void GaussKernel::SelfDists(DistMatrix<double>& data, DistMatrix<double>& dists)
 	Fill(dists,0.0);
 
 	// dists = -2 * data * data^T
-	Herk(UPPER, NORMAL, -2.0,data, 1.0,dists);
+	Herk(UPPER, ADJOINT, -2.0,data, 1.0,dists);
 	
 	// Elementwise Sqr and data copy
 	auto data_cpy(data);
@@ -39,18 +39,18 @@ void GaussKernel::SelfDists(DistMatrix<double>& data, DistMatrix<double>& dists)
 	EntrywiseMap(data_cpy,function<double(double)> (elem_sqr));
 
 	// Add up along each row for sqred norms
-	DistMatrix<double,VR,STAR> ones(width,1,*grid);
+	DistMatrix<double,VR,STAR> ones(dim,1,*grid); 
 	Fill(ones,1.0);
-	DistMatrix<double,VR,STAR> norms(height,1,*grid);
+	DistMatrix<double,VR,STAR> norms(ntrain,1,*grid); 
 	Fill(norms,0.0);
-	Gemv(NORMAL, 1.0,data_cpy,ones, 1.0,norms);
+	Gemv(TRANSPOSE, 1.0,data_cpy,ones, 1.0,norms); 
 	
 	// Need to combine it all back
-	ones.Resize(height,1);
+	ones.Resize(ntrain,1);
 	Fill(ones,1.0);
 	
 	// Add outer products dists += norms * ones^T + ones * norms^T
-	Her2(UPPER, 1.0,ones,norms, dists);
+	Her2(UPPER, 1.0,ones,norms, dists); 
 
 }
 
@@ -66,12 +66,12 @@ void GaussKernel::Kernel(DistMatrix<double>& data1, DistMatrix<double>& data2, D
 
 void GaussKernel::Dists(DistMatrix<double>& data1, DistMatrix<double>& data2, DistMatrix<double> &dists){
 	// Get initial sizes
-	Int ntrain = data1.Height();
-	Int dim    = data1.Width();
-	Int ntest  = data2.Height();	
+	Int dim    = data1.Height(); 
+	Int ntrain = data1.Width();
+	Int ntest  = data2.Width();
 	
 	// Dimension checks
-	if (dim != data2.Width()){
+	if (dim != data2.Height()){
 		if(mpi::WorldRank() == 0){ 
 			std::cout << "COMP_DISTS error: data dimensions don't match!!!" <<std::endl;
 		}
@@ -94,19 +94,19 @@ void GaussKernel::Dists(DistMatrix<double>& data1, DistMatrix<double>& data2, Di
 	Fill(dists,0.0);
 
 	// dists = -2 * data * data^T
-	Gemm(NORMAL, TRANSPOSE, -2.0,data1,data2, 1.0,dists);
+	Gemm(TRANSPOSE, NORMAL, -2.0,data1,data2, 1.0,dists);//switch up
 	
 	// Deal with the first guys norms
 	// Elementwise sqr
 	auto data_cpy(data1);
 	EntrywiseMap(data_cpy,function<double(double)> (elem_sqr));
 
-	// Add up along each row for sqred norms
+	// Add up along each row for sqred norms//switch up
 	DistMatrix<double,VR,STAR> sum_vec(dim,1,*grid);
 	Fill(sum_vec,1.0);
 	DistMatrix<double,VR,STAR> norms(ntrain,1,*grid);
 	Fill(norms,0.0);
-	Gemv(NORMAL, 1.0,data_cpy,sum_vec, 1.0,norms);
+	Gemv(TRANSPOSE, 1.0,data_cpy,sum_vec, 1.0,norms);
 	data_cpy.Empty();
 	
 	// Need to combine it all back
@@ -126,7 +126,7 @@ void GaussKernel::Dists(DistMatrix<double>& data1, DistMatrix<double>& data2, Di
 	// Add up along each row for sqred norms
 	norms.Resize(ntest,1);
 	Fill(norms,0.0);
-	Gemv(NORMAL, 1.0,data_cpy,sum_vec, 1.0,norms);
+	Gemv(TRANSPOSE, 1.0,data_cpy,sum_vec, 1.0,norms);
 	data_cpy.Empty();
 
 	// Need to combine it all back
