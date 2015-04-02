@@ -34,9 +34,6 @@ public:
 	// Matrix which holds the spectrum (decreasing order)
 	DistMatrix<double,VR,STAR> L;
 
-	// Reordering permutation
-	DistMatrix<int,VR,STAR> permute; //TODO is this needed?
-
 	// U matrix for the sample points (truncated to reduced rank)
 	DistMatrix<double> U; 
 
@@ -67,21 +64,20 @@ public:
    * Performs a matrix vector multiply. User must create weight
 	 * vector and allocate space for the result of the multiply
    */
-	void matvec(DistMatrix<double>& weights,DistMatrix<double>& out); 
+	void matvec(DistMatrix<double,VR,STAR>& weights,DistMatrix<double,VR,STAR>& out); 
 
 	/*
 	 * Applies the inverse to a vector and returns the output. As
 	 * with matvec, user must create rhs and allocate memory for 
 	 * the result
 	 */
-	void appinv(DistMatrix<double>& rhs, DistMatrix<double>& x); 
+	void appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x); 
 
 	/*
-	 * Computes the Gaussian kernel from a set of points when compared to itself.
-	 * The inputs are specified in KernelInputs
+	 * Computes the average matvec error and time to compute it 
+	 * over the number of runs specified in runs
 	 */
-	void self_GaussKernel(DistMatrix<double>& data, DistMatrix<double>& K); 
-
+	void matvec_errors(std::vector<int> testIdx,int runs,double& avg_err,double& avg_time); 
 
 private:
 

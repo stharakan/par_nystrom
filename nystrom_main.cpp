@@ -22,7 +22,6 @@ NystromAlg::NystromAlg(DistMatrix<double>* _refData, KernelInputs& _kernel_input
 	nystrom_samples = nystrom_inputs.samples;
 
 	L.SetGrid(*g);
-	permute.SetGrid(*g);
 	U.SetGrid(*g);
 	K_nm.SetGrid(*g);
 	
@@ -30,7 +29,7 @@ NystromAlg::NystromAlg(DistMatrix<double>* _refData, KernelInputs& _kernel_input
 	s_idx.resize(nystrom_rank);
 	d_idx.resize(dim);
 	dummy_idx.resize(1);
-	dummy_idx[1] = 0;
+	dummy_idx[0] = 0;
 	for(int i=0;i<nystrom_samples;i++){ l_idx[i] = i;} //TODO omp this loop
 	for(int i=0;i<nystrom_rank;i++){ s_idx[i] = i;} //TODO omp this loop
 	for(int i=0;i<dim;i++){ d_idx[i] = i;} //TODO omp this loop
@@ -38,7 +37,6 @@ NystromAlg::NystromAlg(DistMatrix<double>* _refData, KernelInputs& _kernel_input
 	// Allocate memory or at least try to
 	try{
 		L.Resize(nystrom_rank,1);
-		permute.Resize(nystrom_rank,1);
 		U.Resize(nystrom_samples,nystrom_rank);
 		K_nm.Resize(ntrain,nystrom_samples);
 	}
@@ -48,7 +46,6 @@ NystromAlg::NystromAlg(DistMatrix<double>* _refData, KernelInputs& _kernel_input
 NystromAlg::~NystromAlg(){
 	// Matrices
 	L.Empty();
-	permute.Empty();
 	U.Empty();
 	K_nm.Empty();
 
@@ -96,6 +93,7 @@ void NystromAlg::decomp(){
 			mmCopy.Empty();
 
 			// Truncate
+			DiagonalSolve(RIGHT,NORMAL,Lmm,Umm);
 			GetSubmatrix(Umm,l_idx,s_idx,U);
 			GetSubmatrix(Lmm,s_idx,dummy_idx,L);
 			Umm.Empty();
@@ -117,13 +115,12 @@ void NystromAlg::orthog(){
 
 	// Check if we've already orthogonalized
 	if(!orth_flag){
-		K_nm.EmptyData(); //Don't need this until later
 		
 		//Form the large U (KU below)
 		DistMatrix<double> KU(ntrain,nystrom_rank,*g);
 		Fill(KU,0.0);
-		Uniform(K_nm,ntrain,nystrom_samples,0.5,0.5);
 		Gemm(NORMAL,NORMAL,1.0,K_nm,U,1.0,KU);
+		K_nm.EmptyData(); //Don't need this until later
 
 		//Take the QR
 		DistMatrix<double,MD,STAR> t(*g);
@@ -175,22 +172,26 @@ void NystromAlg::orthog(){
 
 }
 
-void NystromAlg::matvec(DistMatrix<double>& weights, DistMatrix<double>& out){
-	
+void NystromAlg::matvec(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,VR,STAR>& out){
 	// IF we have orthogonalized, out = K_nm L K_nm^T weights
 	// IF we have only decomped,  out = K_nm U L U^T K_nm^T weights
 	// Either way, can do Kw = K_nm^T * w
-	DistMatrix<double, VR, STAR> Kw(ntrain,1,*g);
+	
+	DistMatrix<double, VR, STAR> Kw(K_nm.Width(),1,*g);
 	Fill(Kw,0.0);
 	Gemv(TRANSPOSE,1.0,K_nm,weights,1.0,Kw);
-	
+
+
 	// Apply either just L, or K_mm = U L U^T, store output in Kw
 	if(!orth_flag){
 		DistMatrix<double,VR, STAR> dummy(nystrom_rank,1,*g);
 		Fill(dummy,0.0);
+
 		Gemv(TRANSPOSE,1.0,U,Kw,1.0,dummy);
 		Fill(Kw,0.0);
-		DiagonalScale(RIGHT,NORMAL,L,dummy);
+
+		DiagonalScale(LEFT,NORMAL,L,dummy);
+
 		Gemv(NORMAL,1.0,U,dummy,1.0,Kw);
 		dummy.EmptyData();
 	}
@@ -206,7 +207,7 @@ void NystromAlg::matvec(DistMatrix<double>& weights, DistMatrix<double>& out){
 	Gemv(NORMAL,1.0,K_nm,Kw,1.0,out);
 }
 
-void NystromAlg::appinv(DistMatrix<double>& rhs, DistMatrix<double>& x){
+void NystromAlg::appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x){
 	// Make sure it is orthogonalized
 	if(!orth_flag){
 		if(mpi::WorldRank() == 0){
@@ -217,21 +218,68 @@ void NystromAlg::appinv(DistMatrix<double>& rhs, DistMatrix<double>& x){
 	
 	// Kapprox = K_nm L K_nm^T, so just need to invert diag
 	// since K_nm is orthogonal
-	// 
 	DistMatrix<double,VR,STAR> Kw(nystrom_rank,1,*g);
 	Fill(Kw,0.0);
 	Gemv(TRANSPOSE, 1.0,K_nm,rhs, 1.0,Kw);
 
 	// Scale by inv diag
-	DiagonalSolve(RIGHT,NORMAL,L,Kw);
+	DiagonalSolve(LEFT,NORMAL,L,Kw);
 
 	// Finish multiply, load into x
-	x.Resize(nystrom_rank,1);
+	x.Resize(ntrain,1);
 	Fill(x,0.0);
-	Gemv(TRANSPOSE, 1.0,K_nm,Kw, 1.0,x);
+	Gemv(NORMAL, 1.0,K_nm,Kw, 1.0,x);
 	
 	// Free the dummy vector
 	Kw.Empty();
+}
+
+void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err,double& avg_time){
+	// Initialize all the stuff we need
+	double tot_err = 0.0;
+	double tot_time = 0.0;
+	int testSize = testIdx.size();
+	DistMatrix<double,VR,STAR> vec(*g);
+	DistMatrix<double,VR,STAR> err(ntrain,1,*g);
+	DistMatrix<double,VR,STAR> err_sub(testSize,1,*g);
+
+	// Form true kernel for given sample idx
+	DistMatrix<double> Xsub(*g);
+	GetSubmatrix(*ptrX,d_idx,testIdx,Xsub);
+	DistMatrix<double> K(testSize,ntrain,*g);
+	gKernel.Kernel(Xsub,*ptrX,K);
+
+	// Do the runs
+	for(int run=0;run<runs;run++){
+		// Approximate kernel-vec into ans, time
+		Fill(err,0.0);
+		Fill(err_sub,0.0);
+		Uniform(vec,ntrain,1);
+
+		double start = mpi::Time();
+		if (mpi::WorldRank() == 0) {std::cout << "Approx matvec" <<std::endl;}
+		this->matvec(vec,err);
+		tot_time += mpi::Time() - start;
+		GetSubmatrix(err,testIdx,dummy_idx,err_sub);
+		
+		// Find exact kernel-vec, subtract from ans
+		if (mpi::WorldRank() == 0) {std::cout << "Exact matvec" <<std::endl;}
+		Gemv(NORMAL, -1.0,K,vec, 1.0,err_sub);
+		double abs_err = FrobeniusNorm(err_sub);
+	
+		Gemv(NORMAL, 1.0,K,vec, 0.0,err_sub);
+		double base_norm = FrobeniusNorm(err_sub);
+		// Compute relative error
+		double rel_err = abs_err /  base_norm;
+		tot_err += rel_err;
+
+	}
+	
+	// Empty and finalize data
+	vec.Empty();
+	err.Empty();
+	avg_err = tot_err/runs;
+	avg_time = tot_time/runs;
 }
 
 int main(int argc, char* argv []){
@@ -255,8 +303,11 @@ int main(int argc, char* argv []){
 	const double sigma     = Input("--sigma","kernel bandwidth", 1.0);
 
 	// Nystrom params
-	int nyst_rank          = Input("--rank","Nystrom rank",min(256,ntrain));
+	int nyst_rank          = Input("--rank","Nystrom rank",min(1024,ntrain));
 	int nyst_samp          = Input("--samp","Nystrom rank",min(nyst_rank*2,ntrain));
+	
+	// Error comp
+	const int test_pts     = Input("--testpts","# of testing points",min(1000, ntrain));
 
 	// Test data (can be null)
 	const string tedataloc = Input("--tedata","test data file","");
@@ -300,6 +351,7 @@ int main(int argc, char* argv []){
 			Read(Ytest,telab,BINARY_FLAT);
 		}
 		
+		
 		//std::cout << "Loading kernel params" <<std::endl;
 		KernelInputs kernel_inputs;
 		kernel_inputs.bandwidth = sigma;
@@ -309,10 +361,10 @@ int main(int argc, char* argv []){
   
 		mpi::Barrier(mpi::COMM_WORLD);
 		//std::cout << "Making kernel class" <<std::endl;
-		GaussKernel gKernel(kernel_inputs, &grid);
+		GaussKernel gKern(kernel_inputs, &grid);
 
 		//std::cout << "Initializing NystromAlg obj" <<std::endl;
-		NystromAlg nyst(&Xtrain,kernel_inputs,nystrom_inputs,&grid, gKernel);
+		NystromAlg nyst(&Xtrain,kernel_inputs,nystrom_inputs,&grid, gKern);
 
 		//std::cout << "Running decomp" <<std::endl;
 		nyst.decomp();
@@ -320,9 +372,9 @@ int main(int argc, char* argv []){
 		//std::cout << "Running orthog" <<std::endl;
 		nyst.orthog();
 
-		DistMatrix<double> test_vec(grid);
+		DistMatrix<double,VR,STAR> test_vec(grid);
 		Uniform(test_vec,ntrain,1);
-		DistMatrix<double> ans(grid);
+		DistMatrix<double,VR,STAR> ans(grid);
 		
 		//std::cout << "Testing multiply" <<std::endl;
 		nyst.matvec(test_vec,ans);
@@ -330,6 +382,42 @@ int main(int argc, char* argv []){
 		//std::cout << "Testing appinv" << std::endl;
 		ans.Empty();
 		nyst.appinv(test_vec,ans);
+
+		// Kernel testing
+		/*
+		DistMatrix<double> A(10,10,grid);
+		DistMatrix<double> K(10,10,grid);
+		std::vector<int> tot_idx(10);
+		for(int i=0;i<10;i++){
+			tot_idx[i] = i;
+			for(int j=0;j<10;j++){
+				A.Set(i,j,(double) (i*j));
+			}
+		}
+		
+		gKern.SelfKernel(A,K);
+		Print(K);
+		std::vector<int> curr_idx = {0,3,6};
+		DistMatrix<double> Asub(10,3,grid);
+		DistMatrix<double> Ksub(3,10,grid);
+		GetSubmatrix(A,tot_idx,curr_idx,Asub);
+		gKern.Kernel(Asub,A,Ksub);
+		Print(Ksub);	
+		*/	
+		
+		double avg_err;
+		double avg_time;
+		// Form testIdx
+		std::vector<int> testIdx(test_pts);
+		double step = ((double)ntrain)/((double) test_pts);
+		for(int i=0;i<test_pts;i++){
+			int currIdx = (int)(i * step);
+			testIdx[i] = currIdx;
+		}
+		
+
+		nyst.matvec_errors(testIdx,10,avg_err,avg_time);
+		if(mpi::WorldRank() == 0){std::cout << "Relative Err: " << avg_err << std::endl;}
 	
 	}
 	catch(exception& e){ ReportException(e); }
