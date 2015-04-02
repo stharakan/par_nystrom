@@ -196,7 +196,7 @@ void NystromAlg::matvec(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,V
 		dummy.EmptyData();
 	}
 	else{
-		DiagonalScale(RIGHT,NORMAL,L,Kw);
+		DiagonalScale(LEFT,NORMAL,L,Kw);
 	}
 	
 	// Set up output vector properly
@@ -257,13 +257,13 @@ void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err
 		Uniform(vec,ntrain,1);
 
 		double start = mpi::Time();
-		if (mpi::WorldRank() == 0) {std::cout << "Approx matvec" <<std::endl;}
+		//if (mpi::WorldRank() == 0) {std::cout << "Approx matvec" <<std::endl;}
 		this->matvec(vec,err);
 		tot_time += mpi::Time() - start;
 		GetSubmatrix(err,testIdx,dummy_idx,err_sub);
 		
 		// Find exact kernel-vec, subtract from ans
-		if (mpi::WorldRank() == 0) {std::cout << "Exact matvec" <<std::endl;}
+		//if (mpi::WorldRank() == 0) {std::cout << "Exact matvec" <<std::endl;}
 		Gemv(NORMAL, -1.0,K,vec, 1.0,err_sub);
 		double abs_err = FrobeniusNorm(err_sub);
 	
