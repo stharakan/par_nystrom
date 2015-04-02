@@ -248,8 +248,8 @@ int main(int argc, char* argv []){
 	const string datadir   = Input<string>("--dir","data directory" );
 	const string trdataloc = Input<string>("--trdata","training data file");
 	const string trlabloc  = Input<string>("--trlabs","training labels file");
-	const Int ntrain       = Input("--ntrain","# of training pts",2000);
-	const Int dim          = Input("--dim","dimension of data",20);
+	const Int ntrain       = Input<Int>("--ntrain","# of training pts");
+	const Int dim          = Input<Int>("--dim","dimension of data");
 
 	// Kernel param
 	const double sigma     = Input("--sigma","kernel bandwidth", 1.0);
@@ -272,9 +272,6 @@ int main(int argc, char* argv []){
 
 	// ---- COMPUTATION ---- ///
 	try{
-		//std::cout << "Initializing data" <<std::endl;
-		DistMatrix<double> refData(dim,ntrain,grid);
-
 		//std::cout << "Loading data" <<std::endl;
 		// Read data
 		DistMatrix<double> Xtrain(dim,ntrain,grid);
@@ -303,14 +300,6 @@ int main(int argc, char* argv []){
 			Read(Ytest,telab,BINARY_FLAT);
 		}
 		
-		//Uniform(*refData,ntrain,dim);
-		for(Int i=0;i<dim;i++){
-			for(Int j =0;j<ntrain;j++){
-				//std::cout << i << " " << j << std::endl;
-				refData.Set(i,j, (double) (i+j));
-			}
-		}
-	
 		//std::cout << "Loading kernel params" <<std::endl;
 		KernelInputs kernel_inputs;
 		kernel_inputs.bandwidth = sigma;
@@ -323,7 +312,7 @@ int main(int argc, char* argv []){
 		GaussKernel gKernel(kernel_inputs, &grid);
 
 		//std::cout << "Initializing NystromAlg obj" <<std::endl;
-		NystromAlg nyst(&refData,kernel_inputs,nystrom_inputs,&grid, gKernel);
+		NystromAlg nyst(&Xtrain,kernel_inputs,nystrom_inputs,&grid, gKernel);
 
 		//std::cout << "Running decomp" <<std::endl;
 		nyst.decomp();
