@@ -1,0 +1,23 @@
+#!/bin/bash
+#SBATCH -J kernRun          # job name
+#SBATCH -o susy8d_h15.out       # output and error file name (%j expands to jobID)
+#SBATCH -n 8              # total number of mpi tasks requested
+#SBATCH -N 4              # total number of nodes (2 sockets / node)
+#SBATCH -p normal             # queue (partition) -- normal, development, etc.
+#SBATCH -t 01:00:00        # run time (hh:mm:ss) - 1.5 hours
+#SBATCH -A PADAS           # Project
+#SBATCH --mail-user=sameer@ices.utexas.edu
+#SBATCH --mail-type=end    # email me when the job finishes
+
+DATA_DIR=/work/00921/biros/maverick/data/machine_learning/
+TR_FILE=susy.4.5m.8d.trn.X.bin
+TR_LAB=susy.4.5m.8d.trn.y.bin
+N=4500000
+D=8
+SIG=0.15
+
+
+cd ${WORK}/research/par_nystrom
+
+ibrun tacc_affinity ./nystrom --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LAB --ntrain $N --dim $D --sigma $SIG
+

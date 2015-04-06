@@ -324,7 +324,10 @@ int main(int argc, char* argv []){
 	// ---- COMPUTATION ---- ///
 	try{
 		//std::cout << "Loading data" <<std::endl;
+		double start;
+
 		// Read data
+		start = mpi::Time();
 		DistMatrix<double> Xtrain(dim,ntrain,grid);
 		string trdata = datadir;
 		trdata.append(trdataloc);
@@ -335,10 +338,13 @@ int main(int argc, char* argv []){
 		string trlab = datadir;
 		trlab.append(trlabloc);
 		Read(Ytrain,trlab,BINARY_FLAT);
+		double train_read_time = mpi::Time() - start;
+		double test_read_time = 0.0;
 
 		// Do we need to load test data?
 		if(tedataloc.compare("") != 0 && telabloc.compare("") != 0){
 			// Read data
+			start = mpi::Time();
 			DistMatrix<double> Xtest(dim,ntest,grid); 
 			string tedata = datadir;
 			tedata.append(tedataloc);
@@ -349,6 +355,7 @@ int main(int argc, char* argv []){
 			string telab = datadir;
 			telab.append(telabloc);
 			Read(Ytest,telab,BINARY_FLAT);
+			test_read_time = mpi::Time() - start;
 		}
 		
 		
@@ -367,11 +374,16 @@ int main(int argc, char* argv []){
 		NystromAlg nyst(&Xtrain,kernel_inputs,nystrom_inputs,&grid, gKern);
 
 		//std::cout << "Running decomp" <<std::endl;
+		start = mpi::Time();	
 		nyst.decomp();
+		double decomp_time = mpi::Time() - start;
 
 		//std::cout << "Running orthog" <<std::endl;
-		nyst.orthog();
+		start = mpi::Time();
+		//nyst.orthog();
+		double orthog_time = mpi::Time() - start;
 
+		/*
 		DistMatrix<double,VR,STAR> test_vec(grid);
 		Uniform(test_vec,ntrain,1);
 		DistMatrix<double,VR,STAR> ans(grid);
@@ -384,7 +396,7 @@ int main(int argc, char* argv []){
 		nyst.appinv(test_vec,ans);
 
 		// Kernel testing
-		/*
+		
 		DistMatrix<double> A(10,10,grid);
 		DistMatrix<double> K(10,10,grid);
 		std::vector<int> tot_idx(10);
@@ -405,8 +417,8 @@ int main(int argc, char* argv []){
 		Print(Ksub);	
 		*/	
 		
-		double avg_err;
-		double avg_time;
+		double avg_mv_err;
+		double avg_mv_time;
 		// Form testIdx
 		std::vector<int> testIdx(test_pts);
 		double step = ((double)ntrain)/((double) test_pts);
@@ -414,10 +426,29 @@ int main(int argc, char* argv []){
 			int currIdx = (int)(i * step);
 			testIdx[i] = currIdx;
 		}
-		
 
-		nyst.matvec_errors(testIdx,10,avg_err,avg_time);
-		if(mpi::WorldRank() == 0){std::cout << "Relative Err: " << avg_err << std::endl;}
+		nyst.matvec_errors(testIdx,10,avg_mv_err,avg_mv_time);
+		
+		// Report times
+		double max_train_read_time;
+		double max_test_read_time;
+		double max_decomp_time;
+		double max_orthog_time;
+		double max_avg_mv_time;
+		mpi::Reduce(&train_read_time,&max_train_read_time,1,mpi::MAX,0,mpi::COMM_WORLD);
+		mpi::Reduce(&test_read_time,&max_test_read_time,1,mpi::MAX,0,mpi::COMM_WORLD);
+		mpi::Reduce(&decomp_time,&max_decomp_time,1,mpi::MAX,0,mpi::COMM_WORLD);
+		mpi::Reduce(&orthog_time,&max_orthog_time,1,mpi::MAX,0,mpi::COMM_WORLD);
+		mpi::Reduce(&avg_mv_time,&max_avg_mv_time,1,mpi::MAX,0,mpi::COMM_WORLD);
+		
+		if(mpi::WorldRank() == 0){
+			std::cout << "Train data read time : " << max_train_read_time <<std::endl;
+			std::cout << "Test data read time  : " << max_test_read_time <<std::endl;
+			std::cout << "Decomposition time   : " << max_decomp_time <<std::endl;
+			std::cout << "Orthogonalize time   : " << max_orthog_time <<std::endl;
+			std::cout << "Matvec time          : " << max_avg_mv_time <<std::endl;
+			std::cout << "Relative error       : " << avg_mv_err << std::endl;
+		}
 	
 	}
 	catch(exception& e){ ReportException(e); }
