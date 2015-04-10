@@ -9,21 +9,20 @@ TR_LAB=covtype.libsvm.trn.y.bin
 N=500000
 D=54
 NODES=2
-TASKS_PER_NODE=20
-TOT_TASKS=$((NODES*TASKS_PER_NODE))
+TASKS=$((NODES*2))
 
-for SIG in 0.02 0.16 0.22 0.35
+for SIG in 0.05
 do
 for RANK in 16384 
 do
 cat <<EOS | sbatch
 #!/bin/bash
-#SBATCH -J $DATA.$SIG.$RANK.$NODES          # job name
-#SBATCH -o $DATA.h$SIG.r$RANK.n$NODES.t$TASKS_PER_NODE.out       # output and error file name (%j expands to jobID)
-#SBATCH -n $TOT_TASKS          # total number of mpi tasks requested
+#SBATCH -J kernRun          # job name
+#SBATCH -o val.$DATA.h$SIG.r$RANK.n$NODES.out       # output and error file name (%j expands to jobID)
+#SBATCH -n $TASKS          # total number of mpi tasks requested
 #SBATCH -N $NODES          # total number of nodes (2 sockets / node)
 #SBATCH -p gpu             # queue (partition) -- normal, development, etc.
-#SBATCH -t 00:30:00        # run time (hh:mm:ss) - 1.5 hours
+#SBATCH -t 01:30:00        # run time (hh:mm:ss) - 1.5 hours
 #SBATCH -A PADAS           # Project
 #SBATCH --mail-user=$EMAIL
 #SBATCH --mail-type=end    # email me when the job finishes
@@ -31,7 +30,7 @@ cat <<EOS | sbatch
 
 cd ${WORK}/research/par_nystrom
 
-ibrun ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LAB --ntrain $N --dim $D --sigma $SIG --rank $RANK
+ibrun valgrind ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LAB --ntrain $N --dim $D --sigma $SIG --rank $RANK
 EOS
 
 done #RANK for loop

@@ -16,7 +16,7 @@ do
 
 cd ${WORK}/research/par_nystrom
 
-ibrun tacc_affinity ./nystrom --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LAB --ntrain $N --dim $D --sigma $SIG --rank $RANK
+ibrun tacc_affinity ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LAB --ntrain $N --dim $D --sigma $SIG --rank $RANK
 EOS
 
 done #RANK for loop
