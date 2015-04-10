@@ -1,0 +1,24 @@
+#!/bin/bash
+module load impi
+
+EMAIL=sameer@ices.utexas.edu
+DATA_DIR=/work/00921/biros/maverick/data/machine_learning/
+DATA=cov
+TR_FILE=covtype.libsvm.trn.X.bin
+TR_LAB=covtype.libsvm.trn.y.bin
+N=500000
+D=54
+
+for SIG in 0.05
+do
+for RANK in 16384
+do
+
+cd ${WORK}/research/par_nystrom
+
+ibrun tacc_affinity ./nystrom --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LAB --ntrain $N --dim $D --sigma $SIG --rank $RANK
+EOS
+
+done #RANK for loop
+done #SIG for loop
+
