@@ -1,5 +1,4 @@
-include /usr/local/conf/ElVars
-#include $(WORK)/downloads/Elemental/build/conf/ElVars
+include $(EL_DIR)/conf/ElVars
 CPP_FLAGS = -openmp
 KNN_INCS =  -I$(KNN_DIR)/generator/ \
             -I$(KNN_DIR)/include/ \
