@@ -35,10 +35,10 @@ public:
 	DistMatrix<double,VR,STAR> L;
 
 	// U matrix for the sample points (truncated to reduced rank)
-	DistMatrix<double> U; 
+	DistMatrix<double,MC,MR> U; 
 
 	// Kernel matrix between refData and samples / Orthogonal U
-	DistMatrix<double> K_nm;
+	DistMatrix<double,MC,MR> K_nm;
   
   /**
   * Inputs: 
