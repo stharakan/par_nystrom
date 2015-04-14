@@ -3,27 +3,28 @@ module load impi
 
 EMAIL=sameer@ices.utexas.edu
 DATA_DIR=/work/00921/biros/maverick/data/machine_learning/
-DATA=cov
-TR_FILE=covtype.libsvm.trn.X.bin
-TR_LAB=covtype.libsvm.trn.y.bin
-N=500000
-D=54
-NODES=2
+DATA=uni3d
+TR_FILE=uniform_3d_4m.bin
+N=4000000
+D=3
 TASKS_PER_NODE=20
+
+for NODES in 8 16 
+do
 TOT_TASKS=$((NODES*TASKS_PER_NODE))
 
-for SIG in 0.02 0.16 0.22 0.35
+for SIG in 0.05
 do
-for RANK in 16384 
+for RANK in 2048 4096 8192 16384 32768
 do
 cat <<EOS | sbatch
 #!/bin/bash
-#SBATCH -J $DATA.$SIG.$RANK.$NODES          # job name
+#SBATCH -J $DATA.$RANK.$NODES          # job name
 #SBATCH -o $DATA.h$SIG.r$RANK.n$NODES.t$TASKS_PER_NODE.out       # output and error file name (%j expands to jobID)
 #SBATCH -n $TOT_TASKS          # total number of mpi tasks requested
 #SBATCH -N $NODES          # total number of nodes (2 sockets / node)
 #SBATCH -p gpu             # queue (partition) -- normal, development, etc.
-#SBATCH -t 00:30:00        # run time (hh:mm:ss) - 1.5 hours
+#SBATCH -t 1:30:00        # run time (hh:mm:ss) - 1.5 hours
 #SBATCH -A PADAS           # Project
 #SBATCH --mail-user=$EMAIL
 #SBATCH --mail-type=end    # email me when the job finishes
@@ -31,9 +32,10 @@ cat <<EOS | sbatch
 
 cd ${WORK}/research/par_nystrom
 
-ibrun ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LAB --ntrain $N --dim $D --sigma $SIG --rank $RANK
+ibrun ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --ntrain $N --dim $D --sigma $SIG --rank $RANK
 EOS
 
 done #RANK for loop
 done #SIG for loop
 
+done #TASK for loop
