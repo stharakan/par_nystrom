@@ -37,10 +37,13 @@ $(MAIN_OBJ) : $(MAIN_SRC) $(DEPS) $(GKERNEL_BIN)
 $(GKERNEL_OBJ) : $(GKERNEL_SRC) $(GKERNEL_DEPS)
 	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(GKERNEL_SRC) $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
-test_matvec : matvec.cpp
+test_matvec.exe : matvec.cpp
 	$(CXX) $(EL_COMPILE_FLAGS) matvec.cpp $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
+
+test_allocate.exe : allocate.cpp
+	$(CXX) $(EL_COMPILE_FLAGS) allocate.cpp $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
 clean:
 	rm *.o
-	rm $(MAIN_BIN)
+	rm *.exe
 
