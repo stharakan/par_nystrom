@@ -20,19 +20,20 @@ NystromAlg::NystromAlg(DistMatrix<double>* _refData, KernelInputs& _kernel_input
 	orth_flag       = false;
 	nystrom_rank    = _nystrom_inputs.rank;
 	nystrom_samples = _nystrom_inputs.samples;
+	samp_flag = nystrom_rank == nystrom_samples;
 
 	L.SetGrid(*_g);
 	U.SetGrid(*_g);
 	K_nm.SetGrid(*_g);
 	
-	l_idx.resize(nystrom_samples);
-	s_idx.resize(nystrom_rank);
+	//l_idx.resize(nystrom_samples);
+	//s_idx.resize(nystrom_rank); //TODO Uncomment if we are orthogonalizing
 	d_idx.resize(dim);
 	dummy_idx.resize(1);
 	dummy_idx[0] = 0;
-	for(int i=0;i<nystrom_samples;i++){ l_idx[i] = i;} //TODO omp this loop
-	for(int i=0;i<nystrom_rank;i++){ s_idx[i] = i;} //TODO omp this loop
-	for(int i=0;i<dim;i++){ d_idx[i] = i;} //TODO omp this loop
+	//for(int i=0;i<nystrom_samples;i++){ l_idx[i] = i;} //TODO omp this loop?
+	//for(int i=0;i<nystrom_rank;i++){ s_idx[i] = i;} //TODO omp this loop?
+	for(int i=0;i<dim;i++){ d_idx[i] = i;} //TODO omp this loop?
 
 	int proc = mpi::WorldRank();
 	// Allocate memory or at least try to
@@ -43,8 +44,10 @@ NystromAlg::NystromAlg(DistMatrix<double>* _refData, KernelInputs& _kernel_input
 	//	std::cout<< "Proc: " << proc  << " dim: " << dim <<std::endl;
 	//	std::cout<< "Proc: " << proc  << " ntrain: " << ntrain <<std::endl;
 	//}
-	//L.Resize(nystrom_rank,1);
-	//U.Resize(nystrom_samples,nystrom_rank);
+	L.Resize(nystrom_rank,1);
+	Fill(L,0.0);
+	U.Resize(nystrom_samples,nystrom_rank);
+	Fill(U,0.0);
 	K_nm.Resize(ntrain,nystrom_samples);
 };
 
@@ -81,19 +84,19 @@ void NystromAlg::decomp(){
 			mpi::Broadcast(&smpIdx[0], nystrom_samples, 0, mpi::COMM_WORLD);
 			
 			// Sample from data
-			if(mpi::WorldRank() == 0){std::cout << "sample"<<std::endl;}
+			//if(mpi::WorldRank() == 0){std::cout << "sample"<<std::endl;}
 			DistMatrix<double> Xsub(*g);
 			GetSubmatrix(*ptrX,d_idx,smpIdx,Xsub); 
 			//Print(Xsub,"X_mn");	
 			
 			// Fill K_mm with kernel values 
-			if(mpi::WorldRank() == 0){std::cout << "small kernel"<<std::endl;}
+			//if(mpi::WorldRank() == 0){std::cout << "small kernel"<<std::endl;}
 			DistMatrix<double> K_mm(nystrom_samples,nystrom_samples,*g);
 			gKernel.SelfKernel(Xsub, K_mm);
 			//Print(K_mm,"K_mm");
 			
 			// Take Eigendecomp of subsampled matrix
-			if(mpi::WorldRank() == 0){std::cout << "Eig" << std::endl;}
+			//if(mpi::WorldRank() == 0){std::cout << "Eig" << std::endl;}
 			auto mmCopy(K_mm);
 			DistMatrix<double> Umm(*g);
 			DistMatrix<double,VR,STAR> Lmm(*g);
@@ -101,15 +104,27 @@ void NystromAlg::decomp(){
 			mmCopy.Empty();
 
 			// Truncate
-			if(mpi::WorldRank() == 0){std::cout <<"truncating" <<std::endl;}
+			//if(mpi::WorldRank() == 0){std::cout <<"truncating" <<std::endl;}
 			DiagonalSolve(RIGHT,NORMAL,Lmm,Umm);
-			GetSubmatrix(Umm,l_idx,s_idx,U);
-			GetSubmatrix(Lmm,s_idx,dummy_idx,L);
+			if (samp_flag){ // need to take a subsample
+				//GetSubmatrix(Umm,l_idx,s_idx,U);
+				//GetSubmatrix(Lmm,s_idx,dummy_idx,L);
+				DistMatrix<double> Id(*g);
+				Identity(Id, nystrom_samples, nystrom_rank);
+				Gemm(NORMAL,NORMAL, 1.0,Umm,Id, 0.0,U);
+				Gemv(NORMAL, 1.0,Id,Lmm, 0.0,L);
+				Umm.Empty();
+				Lmm.Empty();
+			}
+			else{
+				U = Umm;
+				L = Lmm;
+			}
 			Umm.Empty();
 			Lmm.Empty();
 
 			// Compute K_nm
-			if(mpi::WorldRank() == 0){std::cout << "Gen large kernel" << std::endl;}
+			//if(mpi::WorldRank() == 0){std::cout << "Gen large kernel" << std::endl;}
 			gKernel.Kernel(*ptrX,Xsub,K_nm);	
 			
 
@@ -140,9 +155,9 @@ void NystromAlg::orthog(){
 
 		//Form R L R^T
 		DistMatrix<double> R(*g);
-		GetSubmatrix(KU,s_idx,s_idx,R); 
+		GetSubmatrix(KU,s_idx,s_idx,R); //TODO Make this more efficient
 		MakeTrapezoidal(UPPER,R);
-		auto elem_sqrt = [](double x){return (sqrt(x));};//TODO check L is nonneg before calling this?
+		auto elem_sqrt = [](double x){return (sqrt(x));};
 		EntrywiseMap(L,function<double(double)>(elem_sqrt));
 		DiagonalScaleTrapezoid(RIGHT,UPPER,NORMAL,L,R); // Now R_curr = R_true L^(1/2) 
 		Trtrmm(UPPER,R); // Now R_curr = R_old R_old^T  = R_true L R_true
@@ -306,7 +321,7 @@ int main(int argc, char* argv []){
 	// Training data (need this)
 	const string datadir   = Input<string>("--dir","data directory" );
 	const string trdataloc = Input<string>("--trdata","training data file");
-	const string trlabloc  = Input<string>("--trlabs","training labels file");
+	const string trlabloc  = Input<string>("--trlabs","training labels file","");
 	const Int ntrain       = Input<Int>("--ntrain","# of training pts");
 	const Int dim          = Input<Int>("--dim","dimension of data");
 
@@ -315,7 +330,7 @@ int main(int argc, char* argv []){
 
 	// Nystrom params
 	int nyst_rank          = Input("--rank","Nystrom rank",min(1024,ntrain));
-	int nyst_samp          = Input("--samp","Nystrom rank",min(nyst_rank*2,ntrain));
+	int nyst_samp          = Input("--samp","Nystrom rank",min(nyst_rank,ntrain));
 	
 	// Error comp
 	const int test_pts     = Input("--testpts","# of testing points",min(1000, ntrain));
@@ -345,10 +360,13 @@ int main(int argc, char* argv []){
 	Read(Xtrain,trdata,BINARY_FLAT);
 
 	// Read labels
-	DistMatrix<double,VR,STAR> Ytrain(ntrain,1,grid);
-	string trlab = datadir;
-	trlab.append(trlabloc);
-	Read(Ytrain,trlab,BINARY_FLAT);
+	if(trlabloc.compare("") != 0){
+		DistMatrix<double,VR,STAR> Ytrain(ntrain,1,grid);
+		string trlab = datadir;
+		trlab.append(trlabloc);
+		Read(Ytrain,trlab,BINARY_FLAT);
+	}
+	
 	double train_read_time = mpi::Time() - start;
 	double test_read_time = 0.0;
 
@@ -372,6 +390,7 @@ int main(int argc, char* argv []){
 
 
 	//std::cout << "Loading kernel params" <<std::endl;
+	start = mpi::Time();
 	KernelInputs kernel_inputs;
 	kernel_inputs.bandwidth = sigma;
 
@@ -384,6 +403,7 @@ int main(int argc, char* argv []){
 
 	if(proc==0){std::cout << "Initializing NystromAlg obj" <<std::endl;}
 	NystromAlg nyst(&Xtrain,kernel_inputs,nystrom_inputs,&grid, gKern);
+	double init_time = mpi::Time() - start;
 
 	if(proc==0){std::cout << "Running decomp" <<std::endl;}
 	start = mpi::Time();	
@@ -443,11 +463,13 @@ int main(int argc, char* argv []){
 	nyst.matvec_errors(testIdx,10,avg_mv_err,avg_mv_time);
 
 	// Report times
+	double max_init_time;
 	double max_train_read_time;
 	double max_test_read_time;
 	double max_decomp_time;
 	double max_orthog_time;
 	double max_avg_mv_time;
+	mpi::Reduce(&init_time,&max_init_time,1,mpi::MAX,0,mpi::COMM_WORLD);
 	mpi::Reduce(&train_read_time,&max_train_read_time,1,mpi::MAX,0,mpi::COMM_WORLD);
 	mpi::Reduce(&test_read_time,&max_test_read_time,1,mpi::MAX,0,mpi::COMM_WORLD);
 	mpi::Reduce(&decomp_time,&max_decomp_time,1,mpi::MAX,0,mpi::COMM_WORLD);
@@ -457,6 +479,7 @@ int main(int argc, char* argv []){
 	if(mpi::WorldRank() == 0){
 		std::cout << "Train data read time : " << max_train_read_time <<std::endl;
 		std::cout << "Test data read time  : " << max_test_read_time <<std::endl;
+		std::cout << "Initialization time  : " << max_init_time <<std::endl;
 		std::cout << "Decomposition time   : " << max_decomp_time <<std::endl;
 		std::cout << "Orthogonalize time   : " << max_orthog_time <<std::endl;
 		std::cout << "Matvec time          : " << max_avg_mv_time <<std::endl;

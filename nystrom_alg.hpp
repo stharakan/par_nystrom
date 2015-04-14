@@ -90,6 +90,9 @@ private:
 	// Flag that describes whether the result has been orthogonalized
 	bool orth_flag;
 
+	// Flag that describes whether we need to sample
+	bool samp_flag;
+
 	// Describes total number of training points
 	int ntrain;
 
