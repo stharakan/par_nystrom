@@ -33,7 +33,10 @@ public:
 
 	// Matrix which holds the spectrum (decreasing order)
 	DistMatrix<double,VR,STAR> L;
-
+	
+	// Matrix which holds the spectrum after orth (decreasing order)
+	DistMatrix<double,VR,STAR> D;
+	
 	// U matrix for the sample points (truncated to reduced rank)
 	DistMatrix<double,MC,MR> U; 
 
@@ -66,6 +69,13 @@ public:
    */
 	void matvec(DistMatrix<double,VR,STAR>& weights,DistMatrix<double,VR,STAR>& out); 
 
+  /*
+   * Performs a matrix vector multiply with targets different from sources. 
+	 * User must create weight vector, pass in the data points of the new 
+	 * targets and allocate space for the result of the multiply
+   */
+	void matvec(DistMatrix<double>* Xtest, DistMatrix<double,VR,STAR>& weights,DistMatrix<double,VR,STAR>& out); 
+	
 	/*
 	 * Applies the inverse to a vector and returns the output. As
 	 * with matvec, user must create rhs and allocate memory for 
@@ -77,7 +87,19 @@ public:
 	 * Computes the average matvec error and time to compute it 
 	 * over the number of runs specified in runs
 	 */
-	void matvec_errors(std::vector<int> testIdx,int runs,double& avg_err,double& avg_time); 
+	void matvec_errors(std::vector<int> testIdx,int runs,double& avg_err,double& avg_time);
+
+	/*
+	 * Performs regression on a given test data set/label combination.
+	 * Reports both classification error and regression (l2) error
+	 */
+	void regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STAR>* Ytest,double& class_err,double& reg_err,bool exact);
+
+	/*
+	 * Calculatess both class correct and regression error given two arbitrary vectors.
+	 * Decision point is naturally set to 0, can add more detail for this later
+	 */
+	void calc_errors(DistMatrix<double,VR,STAR>& Ytest, DistMatrix<double,VR,STAR>& Yguess, double& class_corr, double& reg_err);
 
 private:
 
@@ -105,16 +127,16 @@ private:
 
 	// Pointers to data
 	DistMatrix<double>* ptrX;
-	DistMatrix<double>* ptrY;
+	DistMatrix<double,VR,STAR>* ptrY;
 
 	// Kernel
 	GaussKernel gKernel;
 
-	// Make a class for this later
-	void kernelCompute(Matrix<double>& sources, Matrix<double>& targets, Matrix<double>& kernel);
-
 	// Store all the indices we'll need
 	std::vector<int> s_idx,l_idx,d_idx,dummy_idx;
+
+	// Store the sample index
+	std::vector<Int> smpIdx;
 
 }; // class
 
