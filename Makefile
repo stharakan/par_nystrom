@@ -19,20 +19,26 @@ ALL_LIBS = -L./ $(EL_LIBS) $(KNN_LIBS) $(CMD_LIB) $(NYST_INC)
 
 GKERNEL_OBJ = gKernel.o
 GKERNEL_SRC = gaussKernel.cpp
-GKERNEL_DEP = gaussKernel.hpp
+GKERNEL_DEPS = gaussKernel.hpp kernel_inputs.hpp
+NYST_OBJ = nystrom_alg.o
+NYST_SRC = nystrom_alg.cpp
+NYST_DEPS = nystrom_alg.hpp nystrom_utils.hpp
 MAIN_BIN = nystrom.exe
 MAIN_OBJ = nystrom_main.o
 MAIN_SRC = nystrom_main.cpp
 MAIN_DEPS = nystrom_alg.hpp nystrom_utils.hpp kernel_inputs.hpp 
-ALL_OBJS = $(MAIN_OBJ) $(GKERNEL_OBJ) 
+ALL_OBJS = $(MAIN_OBJ) $(GKERNEL_OBJ) $(NYST_OBJ)
 
 all : $(MAIN_BIN)
 
 $(MAIN_BIN) : $(ALL_OBJS)
 	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) $^ $(ALL_INCS) $(ALL_LIBS) -o $(MAIN_BIN)
 
-$(MAIN_OBJ) : $(MAIN_SRC) $(DEPS) $(GKERNEL_BIN)
+$(MAIN_OBJ) : $(MAIN_SRC) $(MAIN_DEPS)
 	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(MAIN_SRC) $(ALL_INCS) $(ALL_LIBS) -o $@
+
+$(NYST_OBJ) : $(NYST_SRC) $(NYST_DEPS)
+	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(NYST_SRC) $(ALL_INCS) $(ALL_LIBS) -o $@
 
 $(GKERNEL_OBJ) : $(GKERNEL_SRC) $(GKERNEL_DEPS)
 	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(GKERNEL_SRC) $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
