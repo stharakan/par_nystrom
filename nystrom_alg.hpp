@@ -104,6 +104,10 @@ public:
 	 */
 	void calc_errors(DistMatrix<double,VR,STAR>& Ytest, DistMatrix<double,VR,STAR>& Yguess, double& class_corr, double& reg_err);
 
+	std::vector<int> get_d(){ return d_idx;}
+
+	std::vector<Int> get_smp(){ return smpIdx;}
+
 private:
 
 	// Grid for Elemental

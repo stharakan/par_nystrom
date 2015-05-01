@@ -82,6 +82,7 @@ void NystromAlg::decomp(){
 				randperm(nystrom_samples,ntrain,_smpIdx);
 				//std::cout << "Sample idx" << std::endl;
 				for (int i=0;i<nystrom_samples;i++){
+					//smpIdx[i] = i;
 					smpIdx[i] = _smpIdx[i];
 					//std::cout << _smpIdx[i] << std::endl;
 				}
@@ -95,14 +96,14 @@ void NystromAlg::decomp(){
 			//if(mpi::WorldRank() == 0){std::cout << "sample"<<std::endl;}
 			DistMatrix<double> Xsub(*g);
 			GetSubmatrix(*ptrX,d_idx,smpIdx,Xsub); 
-			//Print(Xsub,"X_mn");	
+			//Print(Xsub,"X_sub");	
 			
 			// Fill K_mm with kernel values 
 			//if(mpi::WorldRank() == 0){std::cout << "small kernel"<<std::endl;}
 			DistMatrix<double> K_mm(nystrom_samples,nystrom_samples,*g);
 			gKernel.SelfKernel(Xsub, K_mm);
 			//Print(K_mm,"K_mm");
-			
+
 			// Take Eigendecomp of subsampled matrix
 			//if(mpi::WorldRank() == 0){std::cout << "Eig" << std::endl;}
 			auto mmCopy(K_mm);
@@ -165,10 +166,10 @@ void NystromAlg::orthog(){
 		qr::ApplyQ(LEFT,NORMAL,KU,t,d,Q_nm);
 		
 		//Form R
-		//DistMatrix<double> R(*g);
-		//GetSubmatrix(KU,s_idx,s_idx,R); //TODO Make this more efficient
-		KU.Resize(t.Height(),KU.Width());
-	 	auto R(KU);
+		DistMatrix<double> R(*g);
+		GetSubmatrix(KU,s_idx,s_idx,R); //TODO Make this more efficient
+		//KU.Resize(t.Height(),KU.Width());
+	 	//auto R(KU);
 		KU.Empty();
 		t.Empty();
 		d.Empty();
@@ -226,7 +227,7 @@ void NystromAlg::matvec(DistMatrix<double>* Xtest, DistMatrix<double,VR,STAR>& w
 		K_mn.Resize(nystrom_samples,ntrain);
 		gKernel.Kernel(Xsub,*ptrX,K_mn);
 
-		Gemv(TRANSPOSE,1.0,K_nm,weights,1.0,Kw);
+		Gemv(NORMAL,1.0,K_mn,weights,1.0,Kw);
 		K_mn.Empty();
 	}
 	else{
@@ -271,10 +272,10 @@ void NystromAlg::matvec(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,V
 		Fill(dummy,0.0);
 		
 		Gemv(TRANSPOSE,1.0,U,Kw,1.0,dummy);
-		Fill(Kw,0.0);
 
 		DiagonalScale(LEFT,NORMAL,L,dummy);
 
+		Fill(Kw,0.0);
 		Gemv(NORMAL,1.0,U,dummy,1.0,Kw);
 		dummy.Empty();
 	}
@@ -352,7 +353,8 @@ void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err
 		//if (mpi::WorldRank() == 0) {std::cout << "Exact matvec" <<std::endl;}
 		Gemv(NORMAL, -1.0,K,vec, 1.0,err_sub);
 		double abs_err = FrobeniusNorm(err_sub);
-	
+
+		Fill(err_sub,0.0);
 		Gemv(NORMAL, 1.0,K,vec, 0.0,err_sub);
 		double base_norm = FrobeniusNorm(err_sub);
 		// Compute relative error
