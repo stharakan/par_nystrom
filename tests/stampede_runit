@@ -38,7 +38,7 @@ cat <<EOS | sbatch
 
 cd ${WORK}/research/par_nystrom
 
-ibrun ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --ntrain $N --dim $D --sigma $SIG --rank $RANK --samp $SAMP 
+ibrun ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --ntrain $N --dim $D --sigma $SIG --rank $RANK --samp $SAMP --tn true
 EOS
 
 done #RANK for loop
