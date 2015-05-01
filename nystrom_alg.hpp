@@ -23,14 +23,17 @@ class NystromAlg {
 	
 public:
 	// Pointer to training data	
-	DistMatrix<double>* refData;
+	DistMatrix<double>* ptrX;
+	
+	// Pointer to training labs	
+	DistMatrix<double,VR,STAR>* ptrY;
 	
 	// Defines the nystrom parameters
 	NystromInputs nystrom_inputs;
 	
-	// Defines the kernel parameters
-	KernelInputs kernel_inputs;
-
+	// Kernel
+	GaussKernel gKernel;
+	
 	// Matrix which holds the spectrum (decreasing order)
 	DistMatrix<double,VR,STAR> L;
 	
@@ -49,9 +52,9 @@ public:
   * - kernel_inputs -- kernel input parameter
   * - nystrom_inputs -- parameters like nystrom rank
   */
-  NystromAlg(DistMatrix<double>* _refData, KernelInputs& _kernel_inputs, NystromInputs& _nystrom_inputs,Grid* _g, GaussKernel _gKernel); 
+	NystromAlg(DistMatrix<double>* _ptrX, DistMatrix<double,VR,STAR>* _ptrY, NystromInputs& _nystrom_inputs,Grid* _g, GaussKernel _gKernel);
   
-  ~NystromAlg(); //TODO -- need to free non-matrix variables
+	~NystromAlg(); //TODO -- need to free non-matrix variables
  
   /*
    * Performs nystrom decomp, returning values into U, L, and permutation
@@ -93,7 +96,7 @@ public:
 	 * Performs regression on a given test data set/label combination.
 	 * Reports both classification error and regression (l2) error
 	 */
-	void regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STAR>* Ytest,double& class_err,double& reg_err,bool exact);
+	void regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STAR>* Ytest,std::vector<int> testIdx, double& class_err,double& reg_err,bool exact);
 
 	/*
 	 * Calculatess both class correct and regression error given two arbitrary vectors.
@@ -124,13 +127,6 @@ private:
 	// Nystrom inputs: record them here for ease
 	int nystrom_rank;
 	int nystrom_samples;
-
-	// Pointers to data
-	DistMatrix<double>* ptrX;
-	DistMatrix<double,VR,STAR>* ptrY;
-
-	// Kernel
-	GaussKernel gKernel;
 
 	// Store all the indices we'll need
 	std::vector<int> s_idx,l_idx,d_idx,dummy_idx;

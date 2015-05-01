@@ -5,21 +5,19 @@
 using namespace El;
 using std::string;
 
-NystromAlg::NystromAlg(DistMatrix<double>* _refData, KernelInputs& _kernel_inputs, NystromInputs& _nystrom_inputs,Grid* _g, GaussKernel _gKernel):
-	refData(_refData),
-	kernel_inputs(_kernel_inputs),
+NystromAlg::NystromAlg(DistMatrix<double>* _ptrX, DistMatrix<double,VR,STAR>* _ptrY, NystromInputs& _nystrom_inputs,Grid* _g, GaussKernel _gKernel):
 	nystrom_inputs(_nystrom_inputs),
 	g(_g),
 	gKernel(_gKernel)
 {
 	int proc = mpi::WorldRank();
 	
-	ptrX = _refData;
-	ptrY = NULL;
+	ptrX = _ptrX;
+	ptrY = _ptrY;
 	//DistMatrix<double,VR,STAR> dummy(1,1,*_g);
 	//ptrY = &dummy; //TODO change this
-	dim             = _refData->Height();
-	ntrain          = _refData->Width(); 
+	dim             = _ptrX->Height();
+	ntrain          = _ptrX->Width(); 
 	dcmp_flag       = false;
 	orth_flag       = false;
 	nystrom_rank    = _nystrom_inputs.rank;
@@ -117,12 +115,12 @@ void NystromAlg::decomp(){
 			//if(mpi::WorldRank() == 0){std::cout <<"truncating" <<std::endl;}
 			DiagonalSolve(RIGHT,NORMAL,Lmm,Umm);
 			if (samp_flag){ // need to take a subsample
-				GetSubmatrix(Umm,l_idx,s_idx,U);
-				GetSubmatrix(Lmm,s_idx,dummy_idx,L);
-				//DistMatrix<double> Id(*g);
-				//Identity(Id, nystrom_samples, nystrom_rank);
-				//Gemm(NORMAL,NORMAL, 1.0,Umm,Id, 0.0,U);
-				//Gemv(TRANSPOSE, 1.0,Id,Lmm, 0.0,L);
+				//GetSubmatrix(Umm,l_idx,s_idx,U);
+				//GetSubmatrix(Lmm,s_idx,dummy_idx,L);
+				DistMatrix<double> Id(*g);
+				Identity(Id, nystrom_samples, nystrom_rank);
+				Gemm(NORMAL,NORMAL, 1.0,Umm,Id, 0.0,U);
+				Gemv(TRANSPOSE, 1.0,Id,Lmm, 0.0,L);
 			}
 			else{
 				U = Umm;
@@ -187,7 +185,7 @@ void NystromAlg::orthog(){
 		DistMatrix<double> smallQ(*g);
 		DistMatrix<double> newL(*g);
 		HermitianEig(UPPER,R,newL,smallQ,DESCENDING);
-		
+		R.Empty();
 		
 		// Load combined Q into K_nm
 		K_nm.Resize(ntrain,nystrom_rank);
@@ -370,23 +368,30 @@ void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err
 	avg_time = tot_time/runs;
 }
 
-void NystromAlg::regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STAR>* Ytest,double& class_corr,double& reg_err, bool exact){
+void NystromAlg::regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STAR>* Ytest,std::vector<int> testIdx,double& class_corr,double& reg_err, bool exact){
 	if(!orth_flag){
-		if(mpi::WorldRank==0){std::cout << "Orthogonalizing first ..." <<std::endl;}
+		if(mpi::WorldRank()==0){std::cout << "Orthogonalizing first ..." <<std::endl;}
 		this->orthog();
 	}
+	// Take subset
+	int testpts = testIdx.size();
+	DistMatrix<double> Xtsub(*g);
+	DistMatrix<double,VR,STAR> Ytsub(*g);
+	GetSubmatrix(*Xtest,d_idx,testIdx,Xtsub);
+	GetSubmatrix(*Ytest,testIdx,dummy_idx,Ytsub);
 
 	// Find weights
 	DistMatrix<double,VR,STAR> weight_vec(*g);
 	this->appinv(*ptrY,weight_vec);
 	DistMatrix<double,VR,STAR> Yguess(*g);
-	Yguess.Resize(Xtest->Width(),1);
+	Yguess.Resize(testpts,1);
 
 	// If exact, only run on testIdx, else approximate for all w/multiply
 	if(exact){
 		// Form K_tn
-		DistMatrix<double> K_tn;
-		gKernel.Kernel(*Xtest,*ptrX,K_tn);
+		DistMatrix<double> K_tn(*g);
+		K_tn.Resize(testpts,ntrain);
+		gKernel.Kernel(Xtsub,*ptrX,K_tn);
 
 		// Multiply K_tn w
 		Fill(Yguess,0.0);
@@ -394,17 +399,12 @@ void NystromAlg::regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STA
 	}
 	else{
 		// Multiply ~ K_tn w
-		this->matvec(Xtest,weight_vec,Yguess);
+		this->matvec(&Xtsub,weight_vec,Yguess);
 	}
 
 
 	// Test errors
-	this->calc_errors(*Ytest,Yguess,class_corr,reg_err);
-
-
-	// Get out the relevant sample of our data
-	DistMatrix<double> Xsub(*g);
-	GetSubmatrix(*ptrX,d_idx,smpIdx,Xsub);
+	this->calc_errors(Ytsub,Yguess,class_corr,reg_err);
 }
 
 void NystromAlg::calc_errors(DistMatrix<double,VR,STAR>& Ytest, DistMatrix<double,VR,STAR>& Yguess, double& class_corr, double& reg_err){

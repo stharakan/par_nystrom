@@ -171,10 +171,11 @@ int main(int argc, char* argv []){
 	// Test data (can be null)
 	const string tedataloc = Input("--tedata","test data file","");
 	const string telabloc  = Input("--telabs","test labels file","");
-	const Int ntest        = Input("--ntest","# of training pts",0);
+	const Int ntest        = Input("--ntest","# of training pts",1000);
 
-	// Want to do regression or other tests?
+	// Set flags to do things if we want
 	const bool regression  = Input("--rr","do regression?",false);
+	const bool do_exact    = Input("--ex","compute reg mv exactly?",true);
 	const bool do_tests    = Input("--tt","do tests?",false);
 
 	// Finish up with inputs
@@ -185,6 +186,8 @@ int main(int argc, char* argv []){
 	const int proc = mpi::WorldRank();
 	double start;
 	bool test_data = false;
+	bool trn_labs = false;
+	std::vector<int> testIdx(test_pts);
 	//////////////////////////////
 
 
@@ -199,11 +202,13 @@ int main(int argc, char* argv []){
 	Read(Xtrain,trdata,BINARY_FLAT);
 
 	// Read labels
+	DistMatrix<double,VR,STAR> Ytrain(grid);
 	if(trlabloc.compare("") != 0){
-		DistMatrix<double,VR,STAR> Ytrain(ntrain,1,grid);
+		Ytrain.Resize(ntrain,1);
 		string trlab = datadir;
 		trlab.append(trlabloc);
 		Read(Ytrain,trlab,BINARY_FLAT);
+		trn_labs = true;
 	}
 
 	// Get timing
@@ -218,6 +223,8 @@ int main(int argc, char* argv []){
 	// ---- Read test data ---- //
 	//////////////////////////////
 	mpi::Barrier(mpi::COMM_WORLD);
+	DistMatrix<double> Xtest(grid);
+	DistMatrix<double,VR,STAR> Ytest(grid);
 	if(tedataloc.compare("") != 0 && telabloc.compare("") != 0){
 		// Set test_data to true
 		test_data = true;
@@ -225,13 +232,13 @@ int main(int argc, char* argv []){
 
 		// Read data
 		start = mpi::Time();
-		DistMatrix<double> Xtest(dim,ntest,grid); 
+		Xtest.Resize(dim,ntest); 
 		string tedata = datadir;
 		tedata.append(tedataloc);
 		Read(Xtest,tedata,BINARY_FLAT);
 
 		// Read labels
-		DistMatrix<double,VR,STAR> Ytest(ntest,1,grid);
+		Ytest.Resize(ntest,1);
 		string telab = datadir;
 		telab.append(telabloc);
 		Read(Ytest,telab,BINARY_FLAT);
@@ -268,7 +275,7 @@ int main(int argc, char* argv []){
 	GaussKernel gKern(kernel_inputs, &grid);
 	
 	// Initialize alg
-	NystromAlg nyst(&Xtrain,kernel_inputs,nystrom_inputs,&grid, gKern);
+	NystromAlg nyst(&Xtrain,&Ytrain,nystrom_inputs,&grid, gKern);
 	double init_time = mpi::Time() - start;
 
 	// Get timing
@@ -299,7 +306,6 @@ int main(int argc, char* argv []){
 	mpi::Barrier(mpi::COMM_WORLD);
 	double avg_mv_err;
 	double avg_mv_time;
-	std::vector<int> testIdx(test_pts);
 	make_testIdx(testIdx,ntrain);
 	nyst.matvec_errors(testIdx,10,avg_mv_err,avg_mv_time);
 
@@ -308,6 +314,7 @@ int main(int argc, char* argv []){
 	mpi::Reduce(&avg_mv_time,&max_avg_mv_time,1,mpi::MAX,0,mpi::COMM_WORLD);
 	if(proc==0){std::cout << "Matvec time          : " << max_avg_mv_time <<std::endl;}
 	if(proc==0){std::cout << "Relative error       : " << avg_mv_err << std::endl;}
+
 	//////////////////////////////
 	
 	
@@ -343,20 +350,27 @@ int main(int argc, char* argv []){
 	//////////////////////////////
 	// ------ Regression ------ //
 	//////////////////////////////
-	//%mpi::Barrier(mpi::COMM_WORLD);
-	//%if(regression and test_data){
-	//%	double err_class,err_l2;
-	//%	start = mpi::Time();
-	//%	nyst.regress_test(Xtest,Ytest,err_class,err_l2);
-	//%	double regress_time = mpi::Time() - start;
-	//%	
-	//%	// Get timing
-	//%	double max_regress_time;
-	//%	mpi::Reduce(&regress_time,&max_regress_time,1,mpi::MAX,0,mpi::COMM_WORLD);
-	//%	if(proc==0){std::cout << "Regression time      : " << max_regress_time <<std::endl;}
-	//%	if(proc==0){std::cout << "L2 error             : " << max_regress_time <<std::endl;}
-	//%	if(proc==0){std::cout << "Classification error : " << max_regress_time <<std::endl;}
-	//%}
+	mpi::Barrier(mpi::COMM_WORLD);
+	if(regression){
+		double class_corr,err_l2;
+		start = mpi::Time();
+		// Pick out subset we will test on of both Xtest, Ytest
+		make_testIdx(testIdx,ntest);
+
+		// Orthogonalize
+		nyst.orthog();
+		double regress_time = mpi::Time() - start;
+		
+		// Run regression tests
+		nyst.regress_test(&Xtest,&Ytest,testIdx,class_corr,err_l2,do_exact);
+		
+		// Get timing
+		double max_regress_time;
+		mpi::Reduce(&regress_time,&max_regress_time,1,mpi::MAX,0,mpi::COMM_WORLD);
+		if(proc==0){std::cout << "Regression time      : " << max_regress_time <<std::endl;}
+		if(proc==0){std::cout << "L2 error             : " << err_l2 <<std::endl;}
+		if(proc==0){std::cout << "Class corr           : " << class_corr <<std::endl;}
+	}
 	//////////////////////////////
 
 	// Finalize

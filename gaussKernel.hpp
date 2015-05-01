@@ -3,6 +3,7 @@
 #include "omp.h"
 #include "kernel_inputs.hpp"
 #include <iostream>
+#include <functional>
 
 using namespace El;
 

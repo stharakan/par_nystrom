@@ -10,7 +10,7 @@ void GaussKernel::SelfKernel(DistMatrix<double>& data, DistMatrix<double>& K){
 	// Exponentiate
 	auto elem_exp = [](double x){return exp(x);};
 	Scale(-gamma,K);
-	EntrywiseMap(K,function<double(double)>(elem_exp));
+	EntrywiseMap(K,std::function<double(double)>(elem_exp));
 
 }
 		
@@ -36,7 +36,7 @@ void GaussKernel::SelfDists(DistMatrix<double>& data, DistMatrix<double>& dists)
 	// Elementwise Sqr and data copy
 	auto data_cpy(data);
 	auto elem_sqr = [](double x){return x*x;};
-	EntrywiseMap(data_cpy,function<double(double)> (elem_sqr));
+	EntrywiseMap(data_cpy,std::function<double(double)> (elem_sqr));
 
 	// Add up along each row for sqred norms
 	DistMatrix<double,VR,STAR> ones(dim,1,*grid); 
@@ -60,7 +60,7 @@ void GaussKernel::Kernel(DistMatrix<double>& data1, DistMatrix<double>& data2, D
 	// Exponentiate
 	auto elem_exp = [](double x){return exp(x);};
 	Scale(-gamma,K);
-	EntrywiseMap(K,function<double(double)>(elem_exp));
+	EntrywiseMap(K,std::function<double(double)>(elem_exp));
 }
 
 
@@ -99,7 +99,7 @@ void GaussKernel::Dists(DistMatrix<double>& data1, DistMatrix<double>& data2, Di
 	// Deal with the first guys norms
 	// Elementwise sqr
 	auto data_cpy(data1);
-	EntrywiseMap(data_cpy,function<double(double)> (elem_sqr));
+	EntrywiseMap(data_cpy,std::function<double(double)> (elem_sqr));
 
 	// Add up along each row for sqred norms//switch up
 	DistMatrix<double,VR,STAR> sum_vec(dim,1,*grid);
@@ -121,7 +121,7 @@ void GaussKernel::Dists(DistMatrix<double>& data1, DistMatrix<double>& data2, Di
 	// Deal with the second guys norms
 	// Elementwise sqr
 	data_cpy = data2;
-	EntrywiseMap(data_cpy,function<double(double)> (elem_sqr));
+	EntrywiseMap(data_cpy,std::function<double(double)> (elem_sqr));
 
 	// Add up along each row for sqred norms
 	norms.Resize(ntest,1);
