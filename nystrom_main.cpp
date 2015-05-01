@@ -87,7 +87,7 @@ double test_nysteig(NystromAlg& nyst){
 
 	// Make kernel matrix
 	DistMatrix<double> K(h,h,g);
-	DistMatrix<double> Xsub;
+	DistMatrix<double> Xsub(g);
 	GetSubmatrix(*(nyst.ptrX),nyst.get_d(),nyst.get_smp(),Xsub);
 	nyst.gKernel.SelfKernel(Xsub,K);
 	auto Kstar(K);
