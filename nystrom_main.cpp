@@ -165,7 +165,7 @@ double test_ortheye(NystromAlg& nyst){
  * and without orthog. Since these are both approximations
  * the result should be the same
  */
-double test_orthmv(NystromAlg& nyst){
+double test_orthmv(NystromAlg& nyst,double& max_regress_time){
 	// Initialize and orthogonalize
 	const Grid& g = nyst.K_nm.Grid();
 	DistMatrix<double,VR,STAR> vec1(g);
@@ -177,7 +177,12 @@ double test_orthmv(NystromAlg& nyst){
 	nyst.matvec(vec1,out1);
 
 	// Do matvec (orth)
+	double r_time,max_r_time;
+	double start = mpi::Time();
 	nyst.orthog();
+	r_time = mpi::Time() - start;
+	mpi::Reduce(&r_time,&max_r_time,1,mpi::MAX,0,mpi::COMM_WORLD);
+	max_regress_time=max_r_time;
 	nyst.matvec(vec1,out2);
 	auto dummy_vec(out2);
 
@@ -457,11 +462,12 @@ int main(int argc, char* argv []){
 	//////////////////////////////
 	// ------ Orth tests ------ //
 	//////////////////////////////
+	double orthog_time = 0.0;
 	if(do_rtests){
 		if(proc==0){std::cout << "Running orth tests ... " <<std::endl;}
 
 		// Test multiply before and after orth
-		double orth_mv_err = test_orthmv(nyst);
+		double orth_mv_err = test_orthmv(nyst,orthog_time);
 		if(proc==0){std::cout << "Error from orth mult : " << orth_mv_err <<std::endl;}
 
 		// Test for orthogonality of k_nm
@@ -486,21 +492,28 @@ int main(int argc, char* argv []){
 	mpi::Barrier(mpi::COMM_WORLD);
 	if(regression){
 		double class_corr,err_l2;
-		start = mpi::Time();
-		// Pick out subset we will test on of both Xtest, Ytest
-		make_testIdx(testIdx,ntest);
 
 		// Orthogonalize
+		start = mpi::Time();
 		nyst.orthog();
-		double regress_time = mpi::Time() - start;
-		
+		double orthog_time2 = mpi::Time() - start;
+		double max_orthog_time = (orthog_time<orthog_time2) ? orthog_time2 : orthog_time;
+
 		// Run regression tests
+		start = mpi::Time();
+		
+		// Pick out subset we will test on of both Xtest, Ytest
+		make_testIdx(testIdx,ntest);
+		
+		// Actual regression
 		nyst.regress_test(&Xtest,&Ytest,testIdx,class_corr,err_l2,do_exact);
+		double regress_time = mpi::Time() - start;
 		
 		// Get timing
 		double max_regress_time;
 		mpi::Reduce(&regress_time,&max_regress_time,1,mpi::MAX,0,mpi::COMM_WORLD);
-		if(proc==0){std::cout << "Regression time      : " << max_regress_time <<std::endl;}
+		if(proc==0){std::cout << "Orthog time          : " << max_orthog_time <<std::endl;}
+		if(proc==0){std::cout << "Other regress time   : " << max_regress_time <<std::endl;}
 		if(proc==0){std::cout << "L2 error             : " << err_l2 <<std::endl;}
 		if(proc==0){std::cout << "Class corr           : " << class_corr <<std::endl;}
 	}
