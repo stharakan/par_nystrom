@@ -3,37 +3,40 @@ module load impi
 
 EMAIL=sameer@ices.utexas.edu
 DATA_DIR=/work/00921/biros/maverick/data/machine_learning/
-#DATA=susy
-#FILE_BASE=susy.icml
-#TR_FILE=$FILE_BASE.trn.X.bin
-#TR_LABS=$FILE_BASE.trn.y.bin
-#TE_FILE=$FILE_BASE.tst.X.bin
-#TE_LABS=$FILE_BASE.tst.y.bin
-#N=4500000
-#NTEST=500000
-#D=18
-
-DATA=higgs
-TR_FILE=higgs.10.5M.28d.trn.X.bin
-TR_LABS=higgs.10.5M.trn.y.bin
-TE_LABS=higgs.0.5M.tst.y.bin
-TE_FILE=higgs.0.5M.28d.tst.X.bin
-N=10500000
+DATA=susy
+FILE_BASE=susy.icml
+TR_FILE=$FILE_BASE.trn.X.bin
+TR_LABS=$FILE_BASE.trn.y.bin
+TE_FILE=$FILE_BASE.tst.X.bin
+TE_LABS=$FILE_BASE.tst.y.bin
+N=4500000
 NTEST=500000
-D=28
+D=18
+
+#DATA=higgs
+#TR_FILE=higgs.10.5M.28d.trn.X.bin
+#TR_LABS=higgs.10.5M.trn.y.bin
+#TE_LABS=higgs.0.5M.tst.y.bin
+#TE_FILE=higgs.0.5M.28d.tst.X.bin
+#N=10500000
+#NTEST=500000
+#D=28
 
 
 TASKS_PER_NODE=20
 MULT=2
 R_FLAG=true
+TR_FLAG=true
+OS_FLAG=true
+TN_FLAG=true
 
-for NODES in 32 
+for NODES in 16 32
 do
 TOT_TASKS=$((NODES*TASKS_PER_NODE))
 
-for SIG in 4 
+for SIG in .25 
 do
-for RANK in 8192 
+for RANK in 8192 16384
 do
 SAMP=$((RANK*MULT))
 cat <<EOS | sbatch
@@ -43,15 +46,15 @@ cat <<EOS | sbatch
 #SBATCH -n $TOT_TASKS          # total number of mpi tasks requested
 #SBATCH -N $NODES          # total number of nodes (2 sockets / node)
 #SBATCH -p gpu             # queue (partition) -- normal, development, etc.
-#SBATCH -t 1:30:00        # run time (hh:mm:ss) - 1.5 hours
+#SBATCH -t 4:30:00        # run time (hh:mm:ss) - 1.5 hours
 #SBATCH -A PADAS           # Project
 #SBATCH --mail-user=$EMAIL
-#SBATCH --mail-type=end    # email me when the job finishes
+##SBATCH --mail-type=end    # email me when the job finishes
 
 
 cd ${WORK}/research/par_nystrom
 
-ibrun ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LABS --tedata $TE_FILE --telabs $TE_LABS --ntrain $N --ntest $NTEST --dim $D --sigma $SIG --rank $RANK --samp $SAMP --rr $R_FLAG --tr true 
+ibrun ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LABS --tedata $TE_FILE --telabs $TE_LABS --ntrain $N --ntest $NTEST --dim $D --sigma $SIG --rank $RANK --samp $SAMP --rr $R_FLAG --tr $TR_FLAG --tn $TN_FLAG --os $OS_FLAG
 EOS
 
 done #RANK for loop
