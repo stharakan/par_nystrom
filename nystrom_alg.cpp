@@ -20,11 +20,14 @@ NystromAlg::NystromAlg(DistMatrix<double>* _ptrX, DistMatrix<double,VR,STAR>* _p
 	ntrain          = _ptrX->Width(); 
 	dcmp_flag       = false;
 	orth_flag       = false;
+	os_flag         = false;
 	nystrom_rank    = _nystrom_inputs.rank;
 	nystrom_samples = _nystrom_inputs.samples;
 	samp_flag = nystrom_rank != nystrom_samples;
 
 
+	S.SetGrid(*_g);
+	V.SetGrid(*_g);
 	L.SetGrid(*_g);
 	D.SetGrid(*_g);
 	U.SetGrid(*_g);
@@ -78,15 +81,13 @@ void NystromAlg::decomp(){
 	
 			//TODO Share among processes?
 			if(mpi::WorldRank() == 0){
-				std::vector<int> _smpIdx;
-				randperm(nystrom_samples,ntrain,_smpIdx);
+				randperm(nystrom_samples,ntrain,smpIdx);
 				//std::cout << "Sample idx" << std::endl;
 				for (int i=0;i<nystrom_samples;i++){
 					//smpIdx[i] = i;
-					smpIdx[i] = _smpIdx[i];
-					//std::cout << _smpIdx[i] << std::endl;
+					//std::cout << smpIdx[i] << std::endl;
 				}
-				_smpIdx.clear();
+				std::sort(smpIdx.begin(),smpIdx.end());
 			}
 
 			//Send vector to everybody else
@@ -133,13 +134,110 @@ void NystromAlg::decomp(){
 			// Compute K_nm
 			//if(mpi::WorldRank() == 0){std::cout << "Gen large kernel" << std::endl;}
 			gKernel.Kernel(*ptrX,Xsub,K_nm);	
-			
+
 
 			dcmp_flag = true;
 		}
 		else{
 			if(mpi::WorldRank() == 0){std::cout << "Decomposition already performed!" << std::endl;}
 		}
+}
+
+void NystromAlg::oneshot(){
+	// Runs the first couple steps of the alg 
+	if(!dcmp_flag){this->decomp();}
+
+	// Check if we ran os already
+	if(!os_flag){
+		auto elem_sqrt = [](double x){return (sqrt(x));};
+		auto elem_32rt = [](double x){return (x * sqrt(x));};
+		bool print = mpi::WorldRank() == -1;
+
+		// Allocate extra mem -- A, U_os, L_os; class vars -- V, S
+		if(print){std::cout << "Allocating mem"<<std::endl;}
+		DistMatrix<double> A(*g);
+		DistMatrix<double> B(*g);
+		auto U_os(U);
+		auto L_os(L);
+		//DiagonalScale(RIGHT,NORMAL,L_os,U_os);
+
+		V.Resize(nystrom_samples,nystrom_samples);
+		Fill(V,0.0);
+		auto Ahalf(V);
+		S.Resize(nystrom_samples,1);
+		Fill(S,0.0);
+		std::vector<int> full_idx(ntrain);
+		int n_oth = ntrain - nystrom_samples;
+		std::vector<int> oth_idx(n_oth);
+
+		// Pick out parts of K_nm we want (load into A and B)
+		//for(int i=0; i<ntrain; i++){full_idx[i]=i;}
+		if(print){std::cout << "set difference"<<std::endl;}
+		std::iota(full_idx.begin(),full_idx.end(),0);
+		std::set_difference(full_idx.begin(),full_idx.end(),smpIdx.begin(),smpIdx.end(),oth_idx.begin());
+		if(print){std::cout << "submatrix a"<<std::endl;}
+		mpi::Barrier(mpi::COMM_WORLD);
+		if(print){std::cout << "submatrix b"<<std::endl;}
+		
+		if(0){
+			GetSubmatrix(K_nm,oth_idx,smpIdx,B); //K_(n-m),m //TODO mem!!!
+			GetSubmatrix(K_nm,smpIdx,smpIdx,A); //K_mm
+		}else{
+			DistMatrix<double> Xoth(dim,n_oth,*g);
+			DistMatrix<double> Xsub(dim,nystrom_samples,*g);
+			B.Resize(n_oth,nystrom_samples);
+			Fill(B,0.0);
+			A.Resize(nystrom_samples,nystrom_samples);
+			Fill(A,0.0);
+			
+			GetSubmatrix(*ptrX,d_idx,oth_idx,Xoth);
+			GetSubmatrix(*ptrX,d_idx,smpIdx,Xsub);
+			
+			gKernel.Kernel(Xoth,Xsub,B);
+			gKernel.SelfKernel(Xsub,A);
+			Xoth.Empty();
+			Xsub.Empty();
+		}
+
+		// Form A = K_mm + K_mm^-1/2 B^T B K_mm^-1/2
+		mpi::Barrier(mpi::COMM_WORLD);
+		if(print){std::cout << "MAke new a"<<std::endl;}
+		Syrk(UPPER,ADJOINT,1.0,B, 0.0,V); // V = B^T B; empty B
+		B.Empty();
+		EntrywiseMap(L_os,function<double(double)>(elem_32rt));// Ahalf = K_mm^-1/2 
+		DiagonalScale(RIGHT,NORMAL, L_os, U_os); // U_os = U L^-1/2 //TODO change this to Herk (half comp)
+		Gemm(NORMAL,TRANSPOSE, 1.0,U_os,U, 0.0,Ahalf); // Ahalf = U_os * U^T
+		B.Resize(nystrom_samples,nystrom_samples); //  B = V * Ahalf; empty V
+		Fill(B,0.0);
+		Symm(LEFT,UPPER, 1.0,V,Ahalf, 0.0, B); 
+		V.Empty();
+		Gemm(NORMAL,NORMAL, 1.0,Ahalf,B, 1.0, A); //  A = A + Ahalf * B; empty B
+		B.Empty();
+
+		if(print){std::cout << "eig"<<std::endl;}
+		// Eigendecompose A into U_os L_os
+		V = A;
+		HermitianEig(UPPER,V,L_os,U_os,DESCENDING);
+		V.Empty();
+
+		// Form S = L_os
+		if(print){std::cout << "form s"<<std::endl;}
+		S = L_os;
+
+		// Form V = A^-1/2 U_os L_os^-1/2
+		if(print){std::cout << "form v"<<std::endl;}
+		V.Resize(nystrom_samples,nystrom_samples);
+		Fill(V,0.0);
+		EntrywiseMap(L_os,function<double(double)>(elem_sqrt)); //U_os = U_os * L^-1/2
+		DiagonalSolve(RIGHT,NORMAL,L_os,U_os);
+		Gemm(NORMAL,NORMAL, 1.0,Ahalf,U_os, 0.0,V); // V = Ahalf * U_os
+
+		os_flag = true;
+	}
+	else{
+		if(mpi::WorldRank==0){std::cout<< "One shot already done" <<std::endl;}
+	}
+
 }
 
 void NystromAlg::orthog(){
@@ -256,6 +354,41 @@ void NystromAlg::matvec(DistMatrix<double>* Xtest, DistMatrix<double,VR,STAR>& w
 	Gemv(NORMAL,1.0,K_tm,Kw,1.0,out);
 }
 
+void NystromAlg::os_matvec(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,VR,STAR>& out){
+	// Assume oneshot, so  out = K_nm V S V^T K_nm^T weights
+	
+	if(orth_flag){
+		if(mpi::WorldRank() == 0){std::cout << "ERROR: Cannot run orthog and os, K-nm is overwritten" <<std::endl;}
+		return;
+	}
+	if(!os_flag){
+		if(mpi::WorldRank() == 0){std::cout << "Need to run one shot before multiply " <<std::endl;}
+		this->oneshot();
+	}	
+
+	DistMatrix<double, VR, STAR> Kw(K_nm.Width(),1,*g);
+	Fill(Kw,0.0);
+	Gemv(TRANSPOSE,1.0,K_nm,weights,1.0,Kw);
+
+	DistMatrix<double,VR, STAR> dummy(V.Width(),1,*g);
+	Fill(dummy,0.0);
+
+	Gemv(TRANSPOSE,1.0,V,Kw,1.0,dummy);
+
+	DiagonalScale(LEFT,NORMAL,S,dummy);
+
+	Fill(Kw,0.0);
+	Gemv(NORMAL,1.0,V,dummy,1.0,Kw);
+	dummy.Empty();
+
+	// Set up output vector properly
+	out.Resize(ntrain,1);
+	Fill(out,0.0);
+
+	// Finish by applying K_nm
+	Gemv(NORMAL,1.0,K_nm,Kw,1.0,out);
+}
+
 void NystromAlg::matvec(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,VR,STAR>& out){
 	// IF we have orthogonalized, out = K_nm L K_nm^T weights
 	// IF we have only decomped,  out = K_nm U L U^T K_nm^T weights
@@ -291,37 +424,78 @@ void NystromAlg::matvec(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,V
 	Gemv(NORMAL,1.0,K_nm,Kw,1.0,out);
 }
 
-void NystromAlg::appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x){
+void NystromAlg::appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x,bool method){
 	// Make sure it is orthogonalized
-	if(!orth_flag){
-		if(mpi::WorldRank() == 0){
-			std::cout << "Need to orthogonalize first .." << std::endl;
+	if(method){
+		if(!orth_flag){
+			if(mpi::WorldRank() == 0){
+				std::cout << "Need to orthogonalize first .." << std::endl;
+			}
+			this->orthog();
 		}
-		this->orthog();
+	}else{
+		if(!os_flag){
+			if(mpi::WorldRank() == 0){
+				std::cout << "Need to run oneshot first .." << std::endl;
+			}
+			this->oneshot();
+		}
 	}
-	
+	bool print = mpi::WorldRank() == -1;
+
 	// Kapprox = K_nm D K_nm^T, so just need to invert diag
 	// since K_nm is orthogonal
-	DistMatrix<double,VR,STAR> Kw(nystrom_rank,1,*g);
-	Fill(Kw,0.0);
-	Gemv(TRANSPOSE, 1.0,K_nm,rhs, 1.0,Kw);
+	if(method){
+		DistMatrix<double,VR,STAR> Kw(nystrom_rank,1,*g);
+		Fill(Kw,0.0);
+		Gemv(TRANSPOSE, 1.0,K_nm,rhs, 1.0,Kw);
 
-	// Scale by inv diag
-	DiagonalSolve(LEFT,NORMAL,D,Kw);
-	//double sig1 = D.Get(0,0);
-	//double sigr = D.Get(nystrom_rank-1,0);
-	//if(mpi::WorldRank()==0){std::cout<<sig1 << " vs " << sigr<<std::endl;}
+		// Scale by inv diag
+		DiagonalSolve(LEFT,NORMAL,D,Kw);
 
-	// Finish multiply, load into x
-	x.Resize(ntrain,1);
-	Fill(x,0.0);
-	Gemv(NORMAL, 1.0,K_nm,Kw, 1.0,x);
-	
-	// Free the dummy vector
-	Kw.Empty();
+		// Finish multiply, load into x
+		x.Resize(ntrain,1);
+		Fill(x,0.0);
+		Gemv(NORMAL, 1.0,K_nm,Kw, 1.0,x);
+
+		// Free the dummy vector
+		Kw.Empty();
+	}
+	else{
+		// Do K_nm^T
+		if(print){std::cout << "here" << std::endl;}
+		DistMatrix<double, VR, STAR> Kw(K_nm.Width(),1,*g);
+		Fill(Kw,0.0);
+		Gemv(TRANSPOSE,1.0,K_nm,rhs,1.0,Kw);
+
+		// Do V^T
+		if(print){std::cout << "Vt mult" << std::endl;}
+		DistMatrix<double,VR, STAR> dummy(V.Width(),1,*g);
+		Fill(dummy,0.0);
+		Gemv(TRANSPOSE,1.0,V,Kw,1.0,dummy);
+
+		// Solve S
+		if(print){std::cout << "S solve" << std::endl;}
+		DiagonalSolve(LEFT,NORMAL,S,dummy);
+
+		// DO V
+		if(print){std::cout << "V mult" << std::endl;}
+		Fill(Kw,0.0);
+		Gemv(NORMAL,1.0,V,dummy,1.0,Kw);
+		dummy.Empty();
+
+		// Set up output vector properly
+		if(print){std::cout << "K_nm mult" << std::endl;}
+		x.Resize(ntrain,1);
+		Fill(x,0.0);
+
+		// Finish by applying K_nm
+		Gemv(NORMAL,1.0,K_nm,Kw,1.0,x);
+	}
+
 }
 
-void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err,double& avg_time){
+void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err,double& avg_time,bool method){
 	// Initialize all the stuff we need
 	double tot_err = 0.0;
 	double tot_time = 0.0;
@@ -345,7 +519,11 @@ void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err
 
 		double start = mpi::Time();
 		//if (mpi::WorldRank() == 0) {std::cout << "Approx matvec" <<std::endl;}
-		this->matvec(vec,err);
+		if(method){
+			this->matvec(vec,err);
+		}else{
+			this->os_matvec(vec,err);
+		}
 		tot_time += mpi::Time() - start;
 		GetSubmatrix(err,testIdx,dummy_idx,err_sub);
 		
@@ -370,10 +548,21 @@ void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err
 	avg_time = tot_time/runs;
 }
 
-void NystromAlg::regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STAR>* Ytest,std::vector<int> testIdx,double& class_corr,double& reg_err, bool exact){
-	if(!orth_flag){
-		if(mpi::WorldRank()==0){std::cout << "Orthogonalizing first ..." <<std::endl;}
-		this->orthog();
+void NystromAlg::regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STAR>* Ytest,std::vector<int> testIdx,double& class_corr,double& reg_err, bool exact,bool method){
+	if(method){
+		if(!orth_flag){
+			if(mpi::WorldRank()==0){std::cout << "Orthogonalizing first ..." <<std::endl;}
+			this->orthog();
+		}
+	}else{
+		if(!os_flag){
+			if(mpi::WorldRank()==0){std::cout << "Running one shot first ..." <<std::endl;}
+			this->oneshot();
+		}
+		if(!exact){
+			if(mpi::WorldRank()==0){std::cout << "Cannot run oneshot and !exact yet!!" <<std::endl;}
+			return;
+		}
 	}
 	// Take subset
 	int testpts = testIdx.size();
@@ -384,7 +573,7 @@ void NystromAlg::regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STA
 
 	// Find weights
 	DistMatrix<double,VR,STAR> weight_vec(*g);
-	this->appinv(*ptrY,weight_vec);
+	this->appinv(*ptrY,weight_vec,method);
 	DistMatrix<double,VR,STAR> Yguess(*g);
 	Yguess.Resize(testpts,1);
 

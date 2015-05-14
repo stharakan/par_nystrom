@@ -9,11 +9,12 @@
 #include "gaussKernel.hpp"
 #include "clustering.h"
 //#include "parallelIO.h"
-
+#include <numeric>
 #include <iostream>
 #include <time.h>
 #include <vector>
 #include <math.h>
+
 
 using namespace El;
 
@@ -33,6 +34,12 @@ public:
 	
 	// Kernel
 	GaussKernel gKernel;
+	
+	// Matrix which holds the one shot spectrum (decreasing order)
+	DistMatrix<double,VR,STAR> S;
+	
+	// Matrix which holds the one shot decomposition
+	DistMatrix<double> V;
 	
 	// Matrix which holds the spectrum (decreasing order)
 	DistMatrix<double,VR,STAR> L;
@@ -62,6 +69,12 @@ public:
   void decomp(); 
 
 	/*
+	 * Orthogonalizes the system, saves K_nm and makes a new V, S so that 
+	 * K \approx K_nm V S V^T K_mn. (K_nm V) is orthogonal.
+	 */
+	void oneshot(); 
+	
+	/*
 	 * Orthogonalizes the system, stores result in K_nm (along with modified L)
 	 */
 	void orthog(); 
@@ -71,6 +84,12 @@ public:
 	 * vector and allocate space for the result of the multiply
    */
 	void matvec(DistMatrix<double,VR,STAR>& weights,DistMatrix<double,VR,STAR>& out); 
+
+  /*
+   * Performs a matvec for oneshot method User must create weight
+	 * vector and allocate space for the result of the multiply
+   */
+	void os_matvec(DistMatrix<double,VR,STAR>& weights,DistMatrix<double,VR,STAR>& out); 
 
   /*
    * Performs a matrix vector multiply with targets different from sources. 
@@ -84,19 +103,19 @@ public:
 	 * with matvec, user must create rhs and allocate memory for 
 	 * the result
 	 */
-	void appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x); 
+	void appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x,bool method=true); 
 
 	/*
 	 * Computes the average matvec error and time to compute it 
 	 * over the number of runs specified in runs
 	 */
-	void matvec_errors(std::vector<int> testIdx,int runs,double& avg_err,double& avg_time);
+	void matvec_errors(std::vector<int> testIdx,int runs,double& avg_err,double& avg_time,bool method=true);
 
 	/*
 	 * Performs regression on a given test data set/label combination.
 	 * Reports both classification error and regression (l2) error
 	 */
-	void regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STAR>* Ytest,std::vector<int> testIdx, double& class_err,double& reg_err,bool exact);
+	void regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STAR>* Ytest,std::vector<int> testIdx, double& class_err,double& reg_err,bool exact,bool method = true);
 
 	/*
 	 * Calculatess both class correct and regression error given two arbitrary vectors.
@@ -106,7 +125,7 @@ public:
 
 	std::vector<int> get_d(){ return d_idx;}
 
-	std::vector<Int> get_smp(){ return smpIdx;}
+	std::vector<int> get_smp(){ return smpIdx;}
 
 private:
 
@@ -118,6 +137,9 @@ private:
 	
 	// Flag that describes whether the result has been orthogonalized
 	bool orth_flag;
+
+	// Flag that describes whether one-shot decomp has been performed
+	bool os_flag;
 
 	// Flag that describes whether we need to sample
 	bool samp_flag;
@@ -136,7 +158,7 @@ private:
 	std::vector<int> s_idx,l_idx,d_idx,dummy_idx;
 
 	// Store the sample index
-	std::vector<Int> smpIdx;
+	std::vector<int> smpIdx;
 
 }; // class
 
