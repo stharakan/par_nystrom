@@ -18,6 +18,8 @@ class NystromInputs {
 		// Sampling rank (default is same as approximation rank)
 		int samples;
 
+		NystromInputs(){};
+
 		// Overloaded constructor (takes both rank and samples)
 		NystromInputs(int _rank, int _samples)
 			:
