@@ -49,6 +49,7 @@ double test_nystl(NystromAlg& nyst, double & cond){
 	return err/base_norm;
 
 }
+
 /*
  * Tests nyst by checking if U^T U = I
  * should be called before orthogonalization 
@@ -73,6 +74,7 @@ double test_nystu(NystromAlg& nyst){
 	double err = HermitianFrobeniusNorm(UPPER,I);
 	return err/sqrt(w);
 }
+
 /*
  * Tests nyst by checking if ULU^T*K=I
  * should be called before orthogonalization 
@@ -147,29 +149,17 @@ double test_orthd(NystromAlg& nyst,double & cond){
 
 /*
  * Tests orthog by seeing how orthogonal the matrices are.
- * Computes V' * K_nm' * K_nm * V and compares it to the identity
+ * Computes K_nm' * K_nm and compares it to the identity
  */
-double test_ortheye(NystromAlg& nyst,bool method = true){
+double test_ortheye(NystromAlg& nyst){
 	const Grid& g = nyst.K_nm.Grid();
 
 	DistMatrix<double> I(g);
 	int width;
 
-	// Do multiply
-	if(!method){
-		width = nyst.V.Width();
-		int height = nyst.K_nm.Height();
-		DistMatrix<double> KV(height, width, g);
-		Fill(KV,0.0);
-		Gemm(NORMAL,NORMAL, 1.0,nyst.K_nm,nyst.V, 0.0,KV);
-		Identity(I,width,width);
-		Herk(UPPER,ADJOINT,1.0,KV, -1.0,I);
-	}
-	else{
-		width = nyst.K_nm.Width();
-		Identity(I,width,width);
-		Herk(UPPER,ADJOINT,1.0,nyst.K_nm, -1.0,I);
-	}
+	width = nyst.K_nm.Width();
+	Identity(I,width,width);
+	Herk(UPPER,ADJOINT,1.0,nyst.K_nm, -1.0,I);
 
 	// Get norm
 	double eye_err = HermitianFrobeniusNorm(UPPER,I);
@@ -269,7 +259,7 @@ int main(int argc, char* argv []){
 	if (mpi::WorldRank() == 0){
 		std::cout << "Creating grid on " << mpicomms << " mpi tasks"<<std::endl;
 	}
-	Grid grid(mpi::COMM_WORLD);
+	const Grid grid(mpi::COMM_WORLD);
 	
 	//////////////////////////////
 	// ---- Process inputs ---- //
@@ -302,7 +292,7 @@ int main(int argc, char* argv []){
 	const bool do_exact    = Input("--ex","compute reg mv exactly?",true);
 	const bool do_rtests   = Input("--tr","do regression tests?",false);
 	const bool do_ntests   = Input("--tn","do nystrom tests?",false);
-	const bool do_oneshot  = Input("--os","do one shot tests?",false);
+	const bool do_qr       = Input("--qr","do one shot tests?",false);
 
 	// Finish up with inputs
 	ProcessInput();
@@ -406,12 +396,17 @@ int main(int argc, char* argv []){
 	NystromInputs nystrom_inputs(nyst_rank,nyst_samp);
 
 	// Actual kernel
-	GaussKernel gKern(kernel_inputs, &grid);
+	GaussKernel gKern(sigma, &grid);
 	
 	// Initialize alg
-	NystromAlg nyst(&Xtrain,&Ytrain,nystrom_inputs,&grid, gKern);
+	//NystromAlg nyst(&Xtrain,nyst_samp,nyst_rank,gKern,&Ytrain);
+	NystromAlg nyst(&Xtrain,sigma,nyst_samp,nyst_rank,&Ytrain);
 	double init_time = mpi::Time() - start;
 
+	// Test qr to compare
+	NystromAlg nyst_qr(&Xtrain,sigma,nyst_samp,nyst_rank,&Ytrain);
+	nyst_qr.force_qr();
+	
 	// Get timing
 	double max_init_time;
 	mpi::Reduce(&init_time,&max_init_time,1,mpi::MAX,0,mpi::COMM_WORLD);
@@ -480,29 +475,38 @@ int main(int argc, char* argv []){
 	//////////////////////////////
 	// Store things to test against later: w_os
 	DistMatrix<double,VR,STAR> w_os(ntest,1,grid);
-	if(do_oneshot){
+	if(do_rtests){
 		// Run oneshot
-	  double max_os_time,os_time;
-		start = mpi::Time();	
 		if(proc==0){std::cout << std::endl <<"Running one shot ... " <<std::endl;}
-		nyst.oneshot();
-		os_time = mpi::Time() - start;
-	  mpi::Reduce(&os_time,&max_os_time,1,mpi::MAX,0,mpi::COMM_WORLD);
-	  if(proc==0){std::cout << "One shot decomp time : " << max_os_time <<std::endl;}
+		
+		// Test multiply before and after orth
+		double os_time;
+		double orth_mv_err = test_orthmv(nyst,os_time);
+		if(proc==0){std::cout << "1shot orth time      : " << os_time <<std::endl;}
+		if(proc==0){std::cout << "1shot vs decomp err  : " << orth_mv_err <<std::endl;}
 
 		// Test mv errors
 		double avg_osmv_err,avg_osmv_time;
-		nyst.matvec_errors(testIdx,10,avg_osmv_err,avg_osmv_time,false);//false --> oneshot
+		nyst.matvec_errors(testIdx,10,avg_osmv_err,avg_osmv_time);
 
 	  // Get timing
 	  double max_avg_osmv_time;
 	  mpi::Reduce(&avg_osmv_time,&max_avg_osmv_time,1,mpi::MAX,0,mpi::COMM_WORLD);
-	  if(proc==0){std::cout << "One shot matvec time : " << max_avg_osmv_time <<std::endl;}
-	  if(proc==0){std::cout << "One shot rel error   : " << avg_osmv_err << std::endl;}
+	  if(proc==0){std::cout << "1shot matvec time    : " << max_avg_osmv_time <<std::endl;}
+	  if(proc==0){std::cout << "1shot rel error      : " << avg_osmv_err << std::endl;}
 
 		// Test orthogonality
-		double orth_err = test_ortheye(nyst,false);
+		double orth_err = test_ortheye(nyst);
 		if(proc==0){std::cout << "How close to orth?   : " << orth_err << std::endl;}
+		
+		// Test for conditioning of diag D
+		double cond;
+		double diag_err = test_orthd(nyst,cond);
+		if(proc==0){std::cout << "Conditioning of D    : " << cond << std::endl;}
+		
+		// Test appinv
+		double inv_err = test_appinv(nyst);
+		if(proc==0){std::cout << "Error from appinv    : " << inv_err <<std::endl;}
 
 		// Get w_os if regresion
 		if(regression){
@@ -510,11 +514,11 @@ int main(int argc, char* argv []){
 			make_testIdx(testIdx,ntest);
 			
 			// get w_os
-			nyst.appinv(Ytrain,w_os,false);//false --> oneshot
+			nyst.appinv(Ytrain,w_os);
 		
 			// test regression errors
 			double class_corr,err_l2;
-			nyst.regress_test(&Xtest,&Ytest,testIdx,class_corr,err_l2,do_exact,false);
+			nyst.regress_test(&Xtest,&Ytest,testIdx,class_corr,err_l2,do_exact);
 			if(proc==0){std::cout << "L2 error (1shot)     : " << err_l2 <<std::endl;}
 			if(proc==0){std::cout << "Class corr (1shot)   : " << class_corr <<std::endl;}
 		}
@@ -523,83 +527,69 @@ int main(int argc, char* argv []){
 	//////////////////////////////
 	
 	//////////////////////////////
-	// ------ Orth tests ------ //
+	// ------- Qr tests ------- //
 	//////////////////////////////
+	DistMatrix<double,VR,STAR> w_qr(ntest,1,grid);
 	double orthog_time = 0.0;
-	if(do_rtests){
-		if(proc==0){std::cout << std::endl<<"Running orth tests ... " <<std::endl;}
+	if(do_qr){
+		if(proc==0){std::cout << std::endl<<"Running qr tests ... " <<std::endl;}
+		
+		// Do decomp
+		nyst_qr.decomp();	
 
 		// Test multiply before and after orth
-		double orth_mv_err = test_orthmv(nyst,orthog_time);
-		if(proc==0){std::cout << "Error from orth mult : " << orth_mv_err <<std::endl;}
+		double orth_mv_err = test_orthmv(nyst_qr,orthog_time);
+		if(proc==0){std::cout << "Qr orth time         : " << orthog_time <<std::endl;}
+		if(proc==0){std::cout << "Qr vs decomp err     : " << orth_mv_err <<std::endl;}
+		
+		// Test mv errors
+		double avg_qrmv_err,avg_qrmv_time;
+		nyst_qr.matvec_errors(testIdx,10,avg_qrmv_err,avg_qrmv_time);
 
+	  // Get timing
+	  double max_avg_qrmv_time;
+	  mpi::Reduce(&avg_qrmv_time,&max_avg_qrmv_time,1,mpi::MAX,0,mpi::COMM_WORLD);
+	  if(proc==0){std::cout << "Qr matvec time       : " << max_avg_qrmv_time <<std::endl;}
+	  if(proc==0){std::cout << "Qr rel error         : " << avg_qrmv_err << std::endl;}
+		
 		// Test for orthogonality of k_nm
-		double orth_err = test_ortheye(nyst);
+		double orth_err = test_ortheye(nyst_qr);
 		if(proc==0){std::cout << "How close to orth?   : " << orth_err << std::endl;}
 
 		// Test for conditioning of diag D
 		double cond;
-		double diag_err = test_orthd(nyst,cond);
-		if(proc==0){std::cout << "D^-1 D err           : " << diag_err << std::endl;}
+		double diag_err = test_orthd(nyst_qr,cond);
 		if(proc==0){std::cout << "Conditioning of D    : " << cond << std::endl;}
 		
 		// Test appinv
-		double inv_err = test_appinv(nyst);
+		double inv_err = test_appinv(nyst_qr);
 		if(proc==0){std::cout << "Error from appinv    : " << inv_err <<std::endl;}
-	
-	}
-	//////////////////////////////
-	
-	
-	//////////////////////////////
-	// ------ Regression ------ //
-	//////////////////////////////
-	mpi::Barrier(mpi::COMM_WORLD);
-	if(regression){
-		double class_corr,err_l2;
-		if(proc==0){std::cout << std::endl <<"Running regression ... " <<std::endl;}
 
-		// Orthogonalize
-		start = mpi::Time();
-		nyst.orthog();
-		double orthog_time2 = mpi::Time() - start;
-		double max_orthog_time = (orthog_time<orthog_time2) ? orthog_time2 : orthog_time;
-		if(proc==0){std::cout << "Orthog time          : " << max_orthog_time <<std::endl;}
-
-		// Run regression tests
-		start = mpi::Time();
+		if(regression){
+			// Pick out subset we will test on of both Xtest, Ytest
+			make_testIdx(testIdx,ntest);
+			
+			// get w_os
+			nyst_qr.appinv(Ytrain,w_qr);
 		
-		// Pick out subset we will test on of both Xtest, Ytest
-		make_testIdx(testIdx,ntest);
-		
-		// Actual regression
-		nyst.regress_test(&Xtest,&Ytest,testIdx,class_corr,err_l2,do_exact);
-		double regress_time = mpi::Time() - start;
-		
-		// Get timing
-		double max_regress_time;
-		mpi::Reduce(&regress_time,&max_regress_time,1,mpi::MAX,0,mpi::COMM_WORLD);
-		if(proc==0){std::cout << "Other regress time   : " << max_regress_time <<std::endl;}
-		if(proc==0){std::cout << "L2 error (orth)      : " << err_l2 <<std::endl;}
-		if(proc==0){std::cout << "Class corr (orth)    : " << class_corr <<std::endl;}
-	
-		if(do_oneshot){
-			// Get w_orth w/appinv
-			DistMatrix<double,VR,STAR> w_orth(ntest,1,grid);
-			nyst.appinv(Ytrain,w_orth);
-
+			// test regression errors
+			double class_corr,err_l2;
+			nyst_qr.regress_test(&Xtest,&Ytest,testIdx,class_corr,err_l2,do_exact);
+			if(proc==0){std::cout << "L2 error (qr)        : " << err_l2 <<std::endl;}
+			if(proc==0){std::cout << "Class corr (qr)      : " << class_corr <<std::endl;}
+			
 			// Test relative error between w_orth,w_os
-			auto err(w_orth);
+			auto err(w_qr);
 			Axpy(-1.0,w_os,err);
 			double abs_err = FrobeniusNorm(err);
-			double err_w = abs_err/FrobeniusNorm(w_orth);
+			double err_w = abs_err/FrobeniusNorm(w_qr);
 
-			if(proc==0){std::cout << "L2 error for  w      : " << err_w <<std::endl;}
+			if(proc==0){std::cout <<std::endl << "qr vs os (w l2 err): " << err_w <<std::endl;}
 		}
-
+	
 	}
 	//////////////////////////////
-
+	
 	// Finalize
 	mpi::Barrier(mpi::COMM_WORLD);
 	Finalize();
