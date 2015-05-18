@@ -24,8 +24,8 @@ NYST_OBJ = nystrom_alg.o
 NYST_SRC = nystrom_alg.cpp
 NYST_DEPS = nystrom_alg.hpp nystrom_utils.hpp
 MAIN_BIN = nystrom.exe
-MAIN_OBJ = nystrom_main.o
-MAIN_SRC = nystrom_main.cpp
+MAIN_OBJ = nystrom_tests.o
+MAIN_SRC = nystrom_tests.cpp
 MAIN_DEPS = nystrom_alg.hpp nystrom_utils.hpp kernel_inputs.hpp 
 ALL_OBJS = $(MAIN_OBJ) $(GKERNEL_OBJ) $(NYST_OBJ)
 
