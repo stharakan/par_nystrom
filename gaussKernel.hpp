@@ -1,7 +1,7 @@
 #include "El.hpp"
 #include "math.h"
 #include "omp.h"
-#include "kernel_inputs.hpp"
+//#include "kernel_inputs.hpp"
 #include <iostream>
 #include <functional>
 
@@ -15,19 +15,27 @@ class GaussKernel {
 		double gamma;
 
 		// Grid
-		Grid* grid;
+		const Grid* grid;
+
+		GaussKernel(){};
+
 		/*
 		 * Constructor:
 		 * kernel_inputs: contains sigma/gamma
 		 */
-		GaussKernel(KernelInputs kernel_inputs,Grid* _grid) :
+		GaussKernel(double _h, const Grid* _grid) :
 			grid(_grid)
 		{
-			sigma = kernel_inputs.bandwidth;
+			sigma = _h;
 			gamma = 1.0 / (2 * sigma * sigma);
 		};
 
 		~GaussKernel(){};
+
+		/*
+		 * Sets sigma and gamma 
+		 */
+		void setParams(double sig,const Grid* _grid);
 
 		/*
 		 * Computes a Gaussian kernel matrix of a particular set of

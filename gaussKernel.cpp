@@ -2,6 +2,11 @@
 
 using namespace El;
 
+void GaussKernel::setParams(double sig,const Grid* _g){
+	sigma = sig;
+	gamma = 1/(2*sigma*sigma);
+	grid = _g;
+}
 
 void GaussKernel::SelfKernel(DistMatrix<double>& data, DistMatrix<double>& K){
 	// Find distances
