@@ -3,14 +3,14 @@ module load impi
 
 EMAIL=sameer@ices.utexas.edu
 DATA_DIR=/work/00921/biros/maverick/data/machine_learning/
-DATA=susy
-FILE_BASE=susy.icml
+DATA=susy100k
+FILE_BASE=susy.100k.18d
 TR_FILE=$FILE_BASE.trn.X.bin
 TR_LABS=$FILE_BASE.trn.y.bin
 TE_FILE=$FILE_BASE.tst.X.bin
 TE_LABS=$FILE_BASE.tst.y.bin
-N=4500000
-NTEST=500000
+N=100000
+NTEST=100000
 D=18
 
 #DATA=higgs
@@ -24,19 +24,19 @@ D=18
 
 
 TASKS_PER_NODE=20
-MULT=2
+MULT=1
 R_FLAG=true
 TR_FLAG=true
-OS_FLAG=true
+QR_FLAG=true
 TN_FLAG=true
 
-for NODES in 16 32
+for NODES in 2
 do
 TOT_TASKS=$((NODES*TASKS_PER_NODE))
 
 for SIG in .25 
 do
-for RANK in 8192 16384
+for RANK in 4096
 do
 SAMP=$((RANK*MULT))
 cat <<EOS | sbatch
@@ -54,7 +54,7 @@ cat <<EOS | sbatch
 
 cd ${WORK}/research/par_nystrom
 
-ibrun ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LABS --tedata $TE_FILE --telabs $TE_LABS --ntrain $N --ntest $NTEST --dim $D --sigma $SIG --rank $RANK --samp $SAMP --rr $R_FLAG --tr $TR_FLAG --tn $TN_FLAG --os $OS_FLAG
+ibrun ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LABS --tedata $TE_FILE --telabs $TE_LABS --ntrain $N --ntest $NTEST --dim $D --sigma $SIG --rank $RANK --samp $SAMP --rr $R_FLAG --tr $TR_FLAG --tn $TN_FLAG --qr $QR_FLAG
 EOS
 
 done #RANK for loop
