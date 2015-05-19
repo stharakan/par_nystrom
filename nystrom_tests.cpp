@@ -205,7 +205,7 @@ double test_orthmv(NystromAlg& nyst,double& max_regress_time){
  * and then applying app_inv. Since these are both approximations
  * the result should be the same as the input
  */
-double test_appinv(NystromAlg& nyst){
+double test_appinv(NystromAlg& nyst,int r = 0){
 	// Initialize
 	const Grid& g = nyst.K_nm.Grid();
 	DistMatrix<double,VR,STAR> x(g);
@@ -214,16 +214,18 @@ double test_appinv(NystromAlg& nyst){
 
 	// Put dummy_vec in correct space (now in x)
 	int height = nyst.K_nm.Height();
-	Uniform(xp,height,1);
+	int width = nyst.K_nm.Width();
+	Uniform(xp,width,1);
 	x.Resize(height,1);
 	Fill(x,0.0);
 	Gemv(NORMAL, 1.0,nyst.K_nm,xp, 1.0,x);
 
 	// Apply forward multiply into y
 	nyst.matvec(x,y);
+	xp.Resize(height,1);
 
 	// Apply inverse into xp
-	nyst.appinv(y,xp);
+	nyst.appinv(y,xp,r);
 	double test = FrobeniusNorm(xp);
 
 	// Get norm
@@ -231,7 +233,33 @@ double test_appinv(NystromAlg& nyst){
 	double err = FrobeniusNorm(xp);
 	double base_norm = FrobeniusNorm(x);
 
+
 	return err/base_norm;
+}
+
+/**
+ * Tests null_space by applying a weight vector to the matrix 
+ * and then applying null_space. Since the new vec is in the space,
+ * null_space should return ~0 for all the spectrum
+ */
+double test_nullspace(NystromAlg& nyst,int r = 0){
+	// Initialize
+	const Grid& g = nyst.K_nm.Grid();
+	DistMatrix<double,VR,STAR> x(g);
+	DistMatrix<double,VR,STAR> xp(g);
+	DistMatrix<double,VR,STAR> y(g);
+
+	// Put dummy_vec in correct space (now in x)
+	int height = nyst.K_nm.Height();
+	int width = nyst.K_nm.Width();
+	Uniform(xp,width,1);
+	x.Resize(height,1);
+	Fill(x,0.0);
+	Gemv(NORMAL, 1.0,nyst.K_nm,xp, 1.0,x);
+
+	// Apply nullspace to xp with whole spectrum
+	double err  = nyst.nullspace(x,xp,r);
+	return err;
 }
 
 /**
@@ -506,7 +534,11 @@ int main(int argc, char* argv []){
 		
 		// Test appinv
 		double inv_err = test_appinv(nyst);
-		if(proc==0){std::cout << "Error from appinv    : " << inv_err <<std::endl;}
+		if(proc==0){std::cout << "Appinv err (1)       : " << inv_err <<std::endl;}
+		inv_err = test_appinv(nyst,nyst_samp/2);
+		if(proc==0){std::cout << "Appinv err (0.5)     : " << inv_err <<std::endl;}
+		inv_err = test_appinv(nyst,nyst_samp/4);
+		if(proc==0){std::cout << "Appinv err (0.25)    : " << inv_err <<std::endl;}
 
 		// Get w_os if regresion
 		if(regression){
@@ -564,7 +596,11 @@ int main(int argc, char* argv []){
 		
 		// Test appinv
 		double inv_err = test_appinv(nyst_qr);
-		if(proc==0){std::cout << "Error from appinv    : " << inv_err <<std::endl;}
+		if(proc==0){std::cout << "Appinv err (1)       : " << inv_err <<std::endl;}
+		inv_err = test_appinv(nyst_qr,nyst_samp/2);
+		if(proc==0){std::cout << "Appinv err (0.5)     : " << inv_err <<std::endl;}
+		inv_err = test_appinv(nyst_qr,nyst_samp/4);
+		if(proc==0){std::cout << "Appinv err (0.25)    : " << inv_err <<std::endl;}
 
 		if(regression){
 			// Pick out subset we will test on of both Xtest, Ytest
