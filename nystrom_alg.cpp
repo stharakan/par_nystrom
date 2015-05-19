@@ -492,7 +492,7 @@ void NystromAlg::matvec(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,V
 	Gemv(NORMAL,1.0,K_nm,Kw,1.0,out);
 }
 
-void NystromAlg::appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x){
+void NystromAlg::appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x,int r){
 	// Make sure it is orthogonalized
 	if(!orth_flag){
 		if(mpi::WorldRank() == 0){std::cout << "Need to orthogonalize first .." << std::endl;}
@@ -507,9 +507,26 @@ void NystromAlg::appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,ST
 	Fill(Kw,0.0);
 	Gemv(TRANSPOSE, 1.0,K_nm,rhs, 1.0,Kw);
 
-	// Scale by inv diag
-	DiagonalSolve(LEFT,NORMAL,D,Kw);
+	if( r && r < nystrom_samples){
+		auto rKw(Kw);
+		auto rD(D);
 
+		rD.Resize(r,1);
+		rKw.Resize(r,1);
+
+		DiagonalSolve(LEFT,NORMAL,rD,rKw);
+		rD.Empty();
+
+		Fill(Kw,0.0);
+		DistMatrix<double> I(*g);
+		Identity(I,nystrom_samples,r); //TODO make better
+		Gemv(NORMAL, 1.0,I,rKw, 0.0,Kw);
+	}else{
+		
+		// Scale by inv diag
+		DiagonalSolve(LEFT,NORMAL,D,Kw);
+	}
+	
 	// Finish multiply, load into x
 	x.Resize(ntrain,1);
 	Fill(x,0.0);
@@ -519,6 +536,49 @@ void NystromAlg::appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,ST
 	Kw.Empty();
 
 }
+
+double NystromAlg::nullspace(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,VR,STAR>& null_vec, int r){
+	// Make sure it is orthogonalized
+	if(!orth_flag){
+		if(mpi::WorldRank() == 0){std::cout << "Need to orthogonalize first .." << std::endl;}
+		this->orthog();
+	}
+
+	// Make sure output is appropriately sized, initialize
+	null_vec.Resize(ntrain,1);
+	Fill(null_vec,0.0);
+	DistMatrix<double,VR,STAR> dummy(*g);
+
+	// Calculate Ur^T Ur w
+	// First check if we need to restrict to r eigenvectors
+	if( r && r < nystrom_samples){
+		dummy.Resize(r,1);
+		Fill(dummy,0.0);
+		Gemv(TRANSPOSE,1.0,K_nm,weights, 0.0,dummy);
+		
+		DistMatrix<double,VR,STAR> dummy2(nystrom_samples,1,*g);
+		Fill(dummy2,0.0);
+		DistMatrix<double> I(*g);
+		Identity(I,nystrom_samples,r); //TODO make better
+		Gemv(NORMAL, 1.0,I,dummy, 0.0,dummy2);
+		I.Empty();
+		dummy.Empty();
+
+		Gemv(NORMAL, 1.0,K_nm,dummy2, 0.0, null_vec);
+		dummy2.Empty();
+	}
+	else{
+		dummy.Resize(nystrom_samples,1);	
+		Fill(dummy,0.0);
+		Gemv(TRANSPOSE,1.0,K_nm,weights, 0.0,dummy);
+
+		Gemv(NORMAL, 1.0,K_nm,dummy, 0.0, null_vec);
+		dummy.Empty();
+	}
+	
+	return FrobeniusNorm(null_vec);
+}
+
 
 void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err,double& avg_time){
 	// Initialize all the stuff we need

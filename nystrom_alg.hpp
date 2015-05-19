@@ -89,18 +89,20 @@ public:
    */
 	void matvec(DistMatrix<double>* Xtest, DistMatrix<double,VR,STAR>& weights,DistMatrix<double,VR,STAR>& out); 
 	
-  /*
-   * Performs a matvec for oneshot method User must create weight
-	 * vector and allocate space for the result of the multiply
-   */
-	//void os_matvec(DistMatrix<double,VR,STAR>& weights,DistMatrix<double,VR,STAR>& out); //TODO delete this function
-	
 	/*
 	 * Applies the inverse to a vector and returns the output. As
 	 * with matvec, user must create rhs and allocate memory for 
-	 * the result
+	 * the result. Inverts using only r columns of U, but default 
+	 * is set to use all cols
 	 */
-	void appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x); 
+	void appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x,int r = 0); //TODO deal with parameter at the end
+
+	/*
+	 * Nullspace calculator: calculates and returns portion of vector not 
+	 * in the columnspace of first r columns of U. Also returns the norm 
+	 * of this vector. Default for r is set to use all cols.
+	 */
+	double nullspace(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,VR,STAR>& null_vec, int r = 0); //TODO write
 
 	/*
 	 * Computes the average matvec error and time to compute it 
