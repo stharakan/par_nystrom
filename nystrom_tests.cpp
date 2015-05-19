@@ -535,6 +535,7 @@ int main(int argc, char* argv []){
 		if(proc==0){std::cout << std::endl<<"Running qr tests ... " <<std::endl;}
 		
 		// Do decomp
+		nyst_qr.set_smp(nyst.get_smp());
 		nyst_qr.decomp();	
 
 		// Test multiply before and after orth
