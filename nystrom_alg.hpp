@@ -27,16 +27,16 @@ public:
 	DistMatrix<double>* ptrX;
 	
 	// Pointer to training labs	
-	DistMatrix<double,VR,STAR>* ptrY;
+	DistMatrix<double,VC,STAR>* ptrY;
 	
 	// Kernel
 	GaussKernel gKernel;
 	
 	// Matrix which holds the spectrum (decreasing order)
-	DistMatrix<double,VR,STAR> L;
+	DistMatrix<double,VC,STAR> L;
 	
 	// Matrix which holds the spectrum after orth (decreasing order)
-	DistMatrix<double,VR,STAR> D;
+	DistMatrix<double,VC,STAR> D;
 	
 	// U matrix for the sample points (truncated to reduced rank)
 	DistMatrix<double,MC,MR> U; 
@@ -50,7 +50,7 @@ public:
   * - kernel_inputs -- kernel input parameter
   * - nystrom_inputs -- parameters like nystrom rank
   */
-	NystromAlg(DistMatrix<double>* _ptrX, int _samp, int _rank, GaussKernel _gKernel, DistMatrix<double,VR,STAR>* _ptrY = NULL);
+	NystromAlg(DistMatrix<double>* _ptrX, int _samp, int _rank, GaussKernel _gKernel, DistMatrix<double,VC,STAR>* _ptrY = NULL);
   
   /**
   * Inputs: 
@@ -58,7 +58,7 @@ public:
   * - kernel_inputs -- kernel input parameter
   * - nystrom_inputs -- parameters like nystrom rank
   */
-	NystromAlg(DistMatrix<double>* _ptrX, double _h, int _samp, int _rank = 0, DistMatrix<double,VR,STAR>* _ptrY = NULL);
+	NystromAlg(DistMatrix<double>* _ptrX, double _h, int _samp, int _rank = 0, DistMatrix<double,VC,STAR>* _ptrY = NULL);
 	
 	~NystromAlg();
  
@@ -80,14 +80,14 @@ public:
    * Performs a matrix vector multiply. User must create weight
 	 * vector and allocate space for the result of the multiply
    */
-	void matvec(DistMatrix<double,VR,STAR>& weights,DistMatrix<double,VR,STAR>& out); 
+	void matvec(DistMatrix<double,VC,STAR>& weights,DistMatrix<double,VC,STAR>& out); 
 
   /*
    * Performs a matrix vector multiply with targets different from sources. 
 	 * User must create weight vector, pass in the data points of the new 
 	 * targets and allocate space for the result of the multiply
    */
-	void matvec(DistMatrix<double>* Xtest, DistMatrix<double,VR,STAR>& weights,DistMatrix<double,VR,STAR>& out); 
+	void matvec(DistMatrix<double>* Xtest, DistMatrix<double,VC,STAR>& weights,DistMatrix<double,VC,STAR>& out); 
 	
 	/*
 	 * Applies the inverse to a vector and returns the output. As
@@ -95,14 +95,14 @@ public:
 	 * the result. Inverts using only r columns of U, but default 
 	 * is set to use all cols
 	 */
-	void appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x,int r = 0); //TODO deal with parameter at the end
+	void appinv(DistMatrix<double,VC,STAR>& rhs, DistMatrix<double,VC,STAR>& x,int r = 0); //TODO deal with parameter at the end
 
 	/*
 	 * Nullspace calculator: calculates and returns portion of vector not 
 	 * in the columnspace of first r columns of U. Also returns the norm 
 	 * of this vector. Default for r is set to use all cols.
 	 */
-	double nullspace(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,VR,STAR>& null_vec, int r = 0); //TODO write
+	double nullspace(DistMatrix<double,VC,STAR>& weights, DistMatrix<double,VC,STAR>& null_vec, int r = 0); //TODO write
 
 	/*
 	 * Computes the average matvec error and time to compute it 
@@ -114,13 +114,13 @@ public:
 	 * Performs regression on a given test data set/label combination.
 	 * Reports both classification error and regression (l2) error
 	 */
-	void regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STAR>* Ytest,std::vector<int> testIdx, double& class_err,double& reg_err,bool exact); 
+	void regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VC,STAR>* Ytest,std::vector<int> testIdx, double& class_err,double& reg_err,bool exact); 
 
 	/*
 	 * Calculates both class correct and regression error given two arbitrary vectors.
 	 * Decision point is naturally set to 0, can add more detail for this later
 	 */
-	void calc_errors(DistMatrix<double,VR,STAR>& Ytest, DistMatrix<double,VR,STAR>& Yguess, double& class_corr, double& reg_err);
+	void calc_errors(DistMatrix<double,VC,STAR>& Ytest, DistMatrix<double,VC,STAR>& Yguess, double& class_corr, double& reg_err);
 
 	/*
 	 * Sets the method to qr instead of one shot

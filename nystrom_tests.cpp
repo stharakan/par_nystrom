@@ -24,7 +24,7 @@ double test_nystl(NystromAlg& nyst, double & cond){
 
 	// Make eye
 	/*
-	DistMatrix<double,VR,STAR> ones(height,1,g);
+	DistMatrix<double,VC,STAR> ones(height,1,g);
 	Fill(ones,1.0);
 
 	// Do multiply
@@ -38,7 +38,7 @@ double test_nystl(NystromAlg& nyst, double & cond){
 	*/
 
 	// Test action instead of L L ^-1
-	DistMatrix<double,VR,STAR> vec(g);
+	DistMatrix<double,VC,STAR> vec(g);
 	Uniform(vec,height,1);
 	auto ref(vec);
 	double base_norm = FrobeniusNorm(vec);
@@ -120,7 +120,7 @@ double test_orthd(NystromAlg& nyst,double & cond){
 
 	// Make eye
 	int height = nyst.D.Height();
-	DistMatrix<double,VR,STAR> ones(height,1,g);
+	DistMatrix<double,VC,STAR> ones(height,1,g);
 	Fill(ones,1.0);
 
 	// Do multiply
@@ -133,7 +133,7 @@ double test_orthd(NystromAlg& nyst,double & cond){
 	cond = sig1/sigh;
 	
 	// Test on a vec
-	//DistMatrix<double,VR,STAR> test_vec(g);
+	//DistMatrix<double,VC,STAR> test_vec(g);
 	//Uniform(test_vec,height,1);
 	//auto test2(test_vec);
 	//DiagonalScale(LEFT,NORMAL,testD,test_vec);
@@ -174,9 +174,9 @@ double test_ortheye(NystromAlg& nyst){
 double test_orthmv(NystromAlg& nyst,double& max_regress_time){
 	// Initialize and orthogonalize
 	const Grid& g = nyst.K_nm.Grid();
-	DistMatrix<double,VR,STAR> vec1(g);
-	DistMatrix<double,VR,STAR> out1(g);
-	DistMatrix<double,VR,STAR> out2(g);
+	DistMatrix<double,VC,STAR> vec1(g);
+	DistMatrix<double,VC,STAR> out1(g);
+	DistMatrix<double,VC,STAR> out2(g);
 	Uniform(vec1,nyst.K_nm.Height(),1);
 	
 	// Do matvec (no orth)
@@ -208,9 +208,9 @@ double test_orthmv(NystromAlg& nyst,double& max_regress_time){
 double test_appinv(NystromAlg& nyst,int r = 0){
 	// Initialize
 	const Grid& g = nyst.K_nm.Grid();
-	DistMatrix<double,VR,STAR> x(g);
-	DistMatrix<double,VR,STAR> xp(g);
-	DistMatrix<double,VR,STAR> y(g);
+	DistMatrix<double,VC,STAR> x(g);
+	DistMatrix<double,VC,STAR> xp(g);
+	DistMatrix<double,VC,STAR> y(g);
 
 	// Put dummy_vec in correct space (now in x)
 	int height = nyst.K_nm.Height();
@@ -245,9 +245,9 @@ double test_appinv(NystromAlg& nyst,int r = 0){
 double test_nullspace(NystromAlg& nyst,int r = 0){
 	// Initialize
 	const Grid& g = nyst.K_nm.Grid();
-	DistMatrix<double,VR,STAR> x(g);
-	DistMatrix<double,VR,STAR> xp(g);
-	DistMatrix<double,VR,STAR> y(g);
+	DistMatrix<double,VC,STAR> x(g);
+	DistMatrix<double,VC,STAR> xp(g);
+	DistMatrix<double,VC,STAR> y(g);
 
 	// Put dummy_vec in correct space (now in x)
 	int height = nyst.K_nm.Height();
@@ -354,7 +354,7 @@ int main(int argc, char* argv []){
 	Print(Xsub,"X_sub -- read");	
 */
 	// Read labels
-	DistMatrix<double,VR,STAR> Ytrain(grid);
+	DistMatrix<double,VC,STAR> Ytrain(grid);
 	if(trlabloc.compare("") != 0){
 		Ytrain.Resize(ntrain,1);
 		string trlab = datadir;
@@ -376,7 +376,7 @@ int main(int argc, char* argv []){
 	//////////////////////////////
 	mpi::Barrier(mpi::COMM_WORLD);
 	DistMatrix<double> Xtest(grid);
-	DistMatrix<double,VR,STAR> Ytest(grid);
+	DistMatrix<double,VC,STAR> Ytest(grid);
 	if(tedataloc.compare("") != 0 && telabloc.compare("") != 0){
 		// Set test_data to true
 		test_data = true;
@@ -502,7 +502,7 @@ int main(int argc, char* argv []){
 	// ----- Oneshot tests ---- //
 	//////////////////////////////
 	// Store things to test against later: w_os
-	DistMatrix<double,VR,STAR> w_os(ntest,1,grid);
+	DistMatrix<double,VC,STAR> w_os(ntest,1,grid);
 	if(do_rtests){
 		// Run oneshot
 		if(proc==0){std::cout << std::endl <<"Running one shot ... " <<std::endl;}
@@ -561,7 +561,7 @@ int main(int argc, char* argv []){
 	//////////////////////////////
 	// ------- Qr tests ------- //
 	//////////////////////////////
-	DistMatrix<double,VR,STAR> w_qr(ntest,1,grid);
+	DistMatrix<double,VC,STAR> w_qr(ntest,1,grid);
 	double orthog_time = 0.0;
 	if(do_qr){
 		if(proc==0){std::cout << std::endl<<"Running qr tests ... " <<std::endl;}

@@ -5,14 +5,14 @@
 using namespace El;
 using std::string;
 
-NystromAlg::NystromAlg(DistMatrix<double>* _ptrX, int _samp, int _rank, GaussKernel _gKernel, DistMatrix<double,VR,STAR>* _ptrY):
+NystromAlg::NystromAlg(DistMatrix<double>* _ptrX, int _samp, int _rank, GaussKernel _gKernel, DistMatrix<double,VC,STAR>* _ptrY):
 	gKernel(_gKernel)
 {
 	int proc = mpi::WorldRank();
 	ptrX = _ptrX;
 	ptrY = _ptrY;
 	g = & (ptrX->Grid());
-	//DistMatrix<double,VR,STAR> dummy(1,1,*_g);
+	//DistMatrix<double,VC,STAR> dummy(1,1,*_g);
 	//ptrY = &dummy; //TODO change this
 	dim             = _ptrX->Height();
 	ntrain          = _ptrX->Width(); 
@@ -50,7 +50,7 @@ NystromAlg::NystromAlg(DistMatrix<double>* _ptrX, int _samp, int _rank, GaussKer
 
 
 // Gaussian kernel specific 
-NystromAlg::NystromAlg(DistMatrix<double>* _ptrX, double _h, int _samp, int _rank, DistMatrix<double,VR,STAR>* _ptrY)
+NystromAlg::NystromAlg(DistMatrix<double>* _ptrX, double _h, int _samp, int _rank, DistMatrix<double,VC,STAR>* _ptrY)
 {
 	// Data 
 	int proc = mpi::WorldRank();
@@ -148,7 +148,7 @@ void NystromAlg::decomp(bool do_orth){
 			//if(mpi::WorldRank() == 0){std::cout << "Eig" << std::endl;}
 			auto mmCopy(K_mm);
 			DistMatrix<double> Umm(*g);
-			DistMatrix<double,VR,STAR> Lmm(*g);
+			DistMatrix<double,VC,STAR> Lmm(*g);
 			HermitianEig(UPPER,mmCopy,Lmm,Umm,DESCENDING);
 			mmCopy.Empty();
 
@@ -371,7 +371,7 @@ void NystromAlg::qr_orthog(){
 
 }
 
-void NystromAlg::matvec(DistMatrix<double>* Xtest, DistMatrix<double,VR,STAR>& weights, DistMatrix<double,VR,STAR>& out){
+void NystromAlg::matvec(DistMatrix<double>* Xtest, DistMatrix<double,VC,STAR>& weights, DistMatrix<double,VC,STAR>& out){
 	// IF we have only decomped,  out = K_(test)m U L U^T K_nm^T weights
 	// IF we have orthogonalized, out = K_(test)m U D K_nm^T weights
 	// Either way we must compute K_(test)m
@@ -379,11 +379,11 @@ void NystromAlg::matvec(DistMatrix<double>* Xtest, DistMatrix<double,VR,STAR>& w
 
 
 	// Compute K_nm * w, may or may not include small U factor
-	DistMatrix<double, VR, STAR> Kw(nystrom_samples,1,*g);
+	DistMatrix<double, VC, STAR> Kw(nystrom_samples,1,*g);
 	Fill(Kw,0.0);
 	Gemv(NORMAL,1.0,K_nm,weights,1.0,Kw);
 
-	DistMatrix<double,VR,STAR> dummy(*g);
+	DistMatrix<double,VC,STAR> dummy(*g);
 	
 	// Do either multiply by D, or L * U^T
 	if( !(orth_flag) ){
@@ -422,7 +422,7 @@ void NystromAlg::matvec(DistMatrix<double>* Xtest, DistMatrix<double,VR,STAR>& w
 	Gemv(NORMAL,1.0,K_tm,Kw,1.0,out);
 }
 
-//void NystromAlg::os_matvec(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,VR,STAR>& out){
+//void NystromAlg::os_matvec(DistMatrix<double,VC,STAR>& weights, DistMatrix<double,VC,STAR>& out){
 //	// Assume oneshot, so  out = K_nm V S V^T K_nm^T weights
 //	
 //	if(qr_flag){
@@ -434,11 +434,11 @@ void NystromAlg::matvec(DistMatrix<double>* Xtest, DistMatrix<double,VR,STAR>& w
 //		this->os_orthog();
 //	}	
 //
-//	DistMatrix<double, VR, STAR> Kw(K_nm.Width(),1,*g);
+//	DistMatrix<double, VC, STAR> Kw(K_nm.Width(),1,*g);
 //	Fill(Kw,0.0);
 //	Gemv(TRANSPOSE,1.0,K_nm,weights,1.0,Kw);
 //
-//	DistMatrix<double,VR, STAR> dummy(V.Width(),1,*g);
+//	DistMatrix<double,VC, STAR> dummy(V.Width(),1,*g);
 //	Fill(dummy,0.0);
 //
 //	Gemv(TRANSPOSE,1.0,V,Kw,1.0,dummy);
@@ -457,19 +457,19 @@ void NystromAlg::matvec(DistMatrix<double>* Xtest, DistMatrix<double,VR,STAR>& w
 //	Gemv(NORMAL,1.0,K_nm,Kw,1.0,out);
 //}
 
-void NystromAlg::matvec(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,VR,STAR>& out){
+void NystromAlg::matvec(DistMatrix<double,VC,STAR>& weights, DistMatrix<double,VC,STAR>& out){
 	// IF we have orthogonalized, out = K_nm D K_nm^T weights
 	// IF we have only decomped,  out = K_nm U L U^T K_nm^T weights
 	// Either way, can do Kw = K_nm^T * w
 	
-	DistMatrix<double, VR, STAR> Kw(K_nm.Width(),1,*g);
+	DistMatrix<double, VC, STAR> Kw(K_nm.Width(),1,*g);
 	Fill(Kw,0.0);
 	Gemv(TRANSPOSE,1.0,K_nm,weights,1.0,Kw);
 
 
 	// Apply either just D, or K_mm = U L U^T, store output in Kw
 	if( !(orth_flag) ){
-		DistMatrix<double,VR, STAR> dummy(nystrom_rank,1,*g);
+		DistMatrix<double,VC, STAR> dummy(nystrom_rank,1,*g);
 		Fill(dummy,0.0);
 		
 		Gemv(TRANSPOSE,1.0,U,Kw,1.0,dummy);
@@ -492,7 +492,7 @@ void NystromAlg::matvec(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,V
 	Gemv(NORMAL,1.0,K_nm,Kw,1.0,out);
 }
 
-void NystromAlg::appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,STAR>& x,int r){
+void NystromAlg::appinv(DistMatrix<double,VC,STAR>& rhs, DistMatrix<double,VC,STAR>& x,int r){
 	// Make sure it is orthogonalized
 	if(!orth_flag){
 		if(mpi::WorldRank() == 0){std::cout << "Need to orthogonalize first .." << std::endl;}
@@ -503,7 +503,7 @@ void NystromAlg::appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,ST
 
 	// Kapprox = K_nm D K_nm^T, so just need to invert diag
 	// since K_nm is orthogonal
-	DistMatrix<double,VR,STAR> Kw(nystrom_rank,1,*g);
+	DistMatrix<double,VC,STAR> Kw(nystrom_rank,1,*g);
 	Fill(Kw,0.0);
 	Gemv(TRANSPOSE, 1.0,K_nm,rhs, 1.0,Kw);
 
@@ -537,7 +537,7 @@ void NystromAlg::appinv(DistMatrix<double,VR,STAR>& rhs, DistMatrix<double,VR,ST
 
 }
 
-double NystromAlg::nullspace(DistMatrix<double,VR,STAR>& weights, DistMatrix<double,VR,STAR>& null_vec, int r){
+double NystromAlg::nullspace(DistMatrix<double,VC,STAR>& weights, DistMatrix<double,VC,STAR>& null_vec, int r){
 	// Make sure it is orthogonalized
 	if(!orth_flag){
 		if(mpi::WorldRank() == 0){std::cout << "Need to orthogonalize first .." << std::endl;}
@@ -547,7 +547,7 @@ double NystromAlg::nullspace(DistMatrix<double,VR,STAR>& weights, DistMatrix<dou
 	// Make sure output is appropriately sized, initialize
 	null_vec.Resize(ntrain,1);
 	Fill(null_vec,0.0);
-	DistMatrix<double,VR,STAR> dummy(*g);
+	DistMatrix<double,VC,STAR> dummy(*g);
 
 	// Calculate Ur^T Ur w
 	// First check if we need to restrict to r eigenvectors
@@ -556,7 +556,7 @@ double NystromAlg::nullspace(DistMatrix<double,VR,STAR>& weights, DistMatrix<dou
 		Fill(dummy,0.0);
 		Gemv(TRANSPOSE,1.0,K_nm,weights, 0.0,dummy);
 		
-		DistMatrix<double,VR,STAR> dummy2(nystrom_samples,1,*g);
+		DistMatrix<double,VC,STAR> dummy2(nystrom_samples,1,*g);
 		Fill(dummy2,0.0);
 		DistMatrix<double> I(*g);
 		Identity(I,nystrom_samples,r); //TODO make better
@@ -585,9 +585,9 @@ void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err
 	double tot_err = 0.0;
 	double tot_time = 0.0;
 	int testSize = testIdx.size();
-	DistMatrix<double,VR,STAR> vec(*g);
-	DistMatrix<double,VR,STAR> err(ntrain,1,*g);
-	DistMatrix<double,VR,STAR> err_sub(testSize,1,*g);
+	DistMatrix<double,VC,STAR> vec(*g);
+	DistMatrix<double,VC,STAR> err(ntrain,1,*g);
+	DistMatrix<double,VC,STAR> err_sub(testSize,1,*g);
 
 	// Form true kernel for given sample idx
 	DistMatrix<double> Xsub(*g);
@@ -629,7 +629,7 @@ void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err
 	avg_time = tot_time/runs;
 }
 
-void NystromAlg::regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STAR>* Ytest,std::vector<int> testIdx,double& class_corr,double& reg_err, bool exact){
+void NystromAlg::regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VC,STAR>* Ytest,std::vector<int> testIdx,double& class_corr,double& reg_err, bool exact){
 	// Make sure it is orthogonalized
 	if(!orth_flag){
 		if(mpi::WorldRank() == 0){std::cout << "Need to orthogonalize first .." << std::endl;}
@@ -639,14 +639,14 @@ void NystromAlg::regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STA
 	// Take subset
 	int testpts = testIdx.size();
 	DistMatrix<double> Xtsub(*g);
-	DistMatrix<double,VR,STAR> Ytsub(*g);
+	DistMatrix<double,VC,STAR> Ytsub(*g);
 	GetSubmatrix(*Xtest,d_idx,testIdx,Xtsub);
 	GetSubmatrix(*Ytest,testIdx,dummy_idx,Ytsub);
 
 	// Find weights
-	DistMatrix<double,VR,STAR> weight_vec(*g);
+	DistMatrix<double,VC,STAR> weight_vec(*g);
 	this->appinv(*ptrY,weight_vec);
-	DistMatrix<double,VR,STAR> Yguess(*g);
+	DistMatrix<double,VC,STAR> Yguess(*g);
 	Yguess.Resize(testpts,1);
 
 	// If exact, only run on testIdx, else approximate for all w/multiply
@@ -669,7 +669,7 @@ void NystromAlg::regress_test(DistMatrix<double>* Xtest,DistMatrix<double,VR,STA
 	this->calc_errors(Ytsub,Yguess,class_corr,reg_err);
 }
 
-void NystromAlg::calc_errors(DistMatrix<double,VR,STAR>& Ytest, DistMatrix<double,VR,STAR>& Yguess, double& class_corr, double& reg_err){
+void NystromAlg::calc_errors(DistMatrix<double,VC,STAR>& Ytest, DistMatrix<double,VC,STAR>& Yguess, double& class_corr, double& reg_err){
 	// Class err
 	Int pts = Ytest.Height();
 	auto elem_sign = [](double x){return (std::copysign(0.5,x));};

@@ -31,7 +31,7 @@ int main(int argc, char* argv[]){
 		time_normal += mpi::Time() - start;
 
 		start = mpi::Time();
-		Gemv(NORMAL,1.0, A, vec, 1.0, ans2);
+		Gemv(TRANSPOSE,1.0, A, vec, 1.0, ans2);
 		time_trans  += mpi::Time() - start;
 	}
 
