@@ -135,6 +135,13 @@ public:
 	 */
 	std::vector<int> get_smp(){ return smpIdx;}
 
+	/*
+	 * Sets particular sample indices to use in decomposition
+	 */
+	void set_smp(std::vector<int> _smpIdx){
+		smpIdx = _smpIdx;
+		samp_flag = false;
+	}
 
 
 private:
@@ -151,8 +158,11 @@ private:
 	// Flag that describes whether we will do qr or not (default is not -- oneshot instead)
 	bool do_qr = false;
 
+	// Flag that describes whether we need to truncate
+	bool trunc_flag;
+
 	// Flag that describes whether we need to sample
-	bool samp_flag;
+	bool samp_flag = true;
 
 	// Describes total number of training points
 	int ntrain;

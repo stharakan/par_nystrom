@@ -18,7 +18,7 @@ NystromAlg::NystromAlg(DistMatrix<double>* _ptrX, int _samp, int _rank, GaussKer
 	ntrain          = _ptrX->Width(); 
 	nystrom_rank    = _rank;
 	nystrom_samples = _samp;
-	samp_flag = nystrom_rank != nystrom_samples;
+	trunc_flag = nystrom_rank != nystrom_samples;
 
 
 	L.SetGrid(*g);
@@ -68,7 +68,7 @@ NystromAlg::NystromAlg(DistMatrix<double>* _ptrX, double _h, int _samp, int _ran
 	else{
 		nystrom_rank = nystrom_samples;
 	}
-	samp_flag = nystrom_rank != nystrom_samples;
+	trunc_flag = nystrom_rank != nystrom_samples;
 
 	// Kernel
 	gKernel.setParams(_h,g);
@@ -114,21 +114,23 @@ NystromAlg::~NystromAlg(){
 void NystromAlg::decomp(bool do_orth){
 		if (!dcmp_flag){
 			// Random sample of size nystrom_samples
-			smpIdx.resize(nystrom_samples);	
-	
-			//TODO Share among processes?
-			if(mpi::WorldRank() == 0){
-				randperm(nystrom_samples,ntrain,smpIdx);
-				//std::cout << "Sample idx" << std::endl;
-				for (int i=0;i<nystrom_samples;i++){
-					//smpIdx[i] = i;
-					//std::cout << smpIdx[i] << std::endl;
-				}
-				std::sort(smpIdx.begin(),smpIdx.end());
-			}
+			if (samp_flag){
+				smpIdx.resize(nystrom_samples);	
 
-			//Send vector to everybody else
-			mpi::Broadcast(&smpIdx[0], nystrom_samples, 0, mpi::COMM_WORLD);
+				//TODO Share among processes?
+				if(mpi::WorldRank() == 0){
+					randperm(nystrom_samples,ntrain,smpIdx);
+					//std::cout << "Sample idx" << std::endl;
+					for (int i=0;i<nystrom_samples;i++){
+						//smpIdx[i] = i;
+						//std::cout << smpIdx[i] << std::endl;
+					}
+					std::sort(smpIdx.begin(),smpIdx.end());
+				}
+
+				//Send vector to everybody else
+				mpi::Broadcast(&smpIdx[0], nystrom_samples, 0, mpi::COMM_WORLD);
+			}
 			
 			// Sample from data
 			//if(mpi::WorldRank() == 0){std::cout << "sample"<<std::endl;}
@@ -153,7 +155,7 @@ void NystromAlg::decomp(bool do_orth){
 			// Truncate
 			//if(mpi::WorldRank() == 0){std::cout <<"truncating" <<std::endl;}
 			DiagonalSolve(RIGHT,NORMAL,Lmm,Umm);
-			if (samp_flag){ // need to take a subsample
+			if (trunc_flag){ // need to take a subsample
 				//GetSubmatrix(Umm,l_idx,s_idx,U);
 				//GetSubmatrix(Lmm,s_idx,dummy_idx,L);
 				DistMatrix<double> Id(*g);
@@ -246,13 +248,17 @@ void NystromAlg::os_orthog(){
 		GetSubmatrix(*ptrX,d_idx,oth_idx,Xoth);
 		GetSubmatrix(*ptrX,d_idx,smpIdx,Xsub);
 
+		// Compute kernels (symmetric if we can)
 		gKernel.Kernel(Xoth,Xsub,B);
-		gKernel.SelfKernel(Xsub,A);
+		if(trunc_flag){
+			gKernel.Kernel(Xsub,Xsub,A);
+		}else{
+			gKernel.SelfKernel(Xsub,A);
+		}
 		Xoth.Empty();
 		Xsub.Empty();
 	}
 
-	// Want to make A = K_mm + K_mm^-1/2 B^T B K_mm^-1/2
 	// First make B^T B
 	Syrk(UPPER,ADJOINT,1.0,B, 0.0,U); 
 	B.Empty();
@@ -263,13 +269,23 @@ void NystromAlg::os_orthog(){
 	Gemm(NORMAL,TRANSPOSE, 1.0,U_os,Ucopy, 0.0,Ahalf); // Ahalf = U_os * U^T
 	Ucopy.Empty();
 	
-	// Form Kmm^-1/2 B^T B K_mm^-1/2
+	// If we truncated, need to adjust to preserve orthogonality
+	if(trunc_flag){
+		// Form Kmm^-1/2 (A^2 + B^T B) K_mm^-1/2
+		Gemm(NORMAL,NORMAL, 1.0,A,A, 1.0, U); //Inner matrix
+		Fill(A,0.0); // Don't need A anymore
+	}
+	
+	// Form Kmm^-1/2 B^T B K_mm^-1/2 (inner matrix is changed if trunc)
 	B.Resize(nystrom_samples,nystrom_samples); //  B = V * Ahalf; empty V
 	Fill(B,0.0);
 	Symm(LEFT,UPPER, 1.0,U,Ahalf, 0.0, B); 
 	U.Empty();
-	Gemm(NORMAL,NORMAL, 1.0,Ahalf,B, 1.0, A); //  A = A + Ahalf * B; empty B
+			
+	// A = K_mm + Kmm^-1/2 * B^T B K_mm^-1/2
+	Gemm(NORMAL,NORMAL, 1.0,Ahalf,B, 1.0, A); 
 	B.Empty();
+	
 
 	if(print){std::cout << "eig"<<std::endl;}
 	// Eigendecompose A into U_os L_os
@@ -615,3 +631,4 @@ void NystromAlg::calc_errors(DistMatrix<double,VR,STAR>& Ytest, DistMatrix<doubl
 	reg_err = FrobeniusNorm(y1)/base_norm;
 
 }
+
