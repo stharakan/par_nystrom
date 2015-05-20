@@ -13,10 +13,21 @@ KNN_LIBS = -L$(KNN_DIR)/build -lknn -lrrot
 CMD_INC = -I${KNN_DIR}/external/cmd/
 CMD_LIB = -L${KNN_DIR}/build -lcmd
 
+PSC_INC = -I$(PETSC_DIR)/include
+PSC_LIB = -L$(PETSC_DIR)/lib -lpetsc
+
+ASK_LIB = -L$(ASKIT_DIR)/build/ -laskit 
+ASK_INC = -I$(ASKIT_DIR)/src/
 
 ALL_INCS = $(EL_LINK_FLAGS) -I./ $(KNN_INCS) $(CMD_INC) 
 ALL_LIBS = -L./ $(EL_LIBS) $(KNN_LIBS) $(CMD_LIB) $(NYST_INC)
 
+ASKIT_OBJ = askit_el_utils.o
+ASKIT_SRC = askit_el_utils.cpp
+ASKIT_DEPS = askit_el_utils.hpp
+ELPSC_BIN = el_petsc_test.exe
+ELPSC_SRC = el_petsc_utils.cpp
+ELPSC_DEPS = el_petsc_utils.hpp
 GKERNEL_OBJ = gKernel.o
 GKERNEL_SRC = gaussKernel.cpp
 GKERNEL_DEPS = gaussKernel.hpp kernel_inputs.hpp
@@ -26,7 +37,10 @@ NYST_DEPS = nystrom_alg.hpp nystrom_utils.hpp
 MAIN_BIN = nystrom.exe
 MAIN_OBJ = nystrom_tests.o
 MAIN_SRC = nystrom_tests.cpp
-MAIN_DEPS = nystrom_alg.hpp nystrom_utils.hpp kernel_inputs.hpp 
+MAIN_DEPS = nystrom_alg.hpp nystrom_utils.hpp kernel_inputs.hpp
+
+
+
 ALL_OBJS = $(MAIN_OBJ) $(GKERNEL_OBJ) $(NYST_OBJ)
 
 all : $(MAIN_BIN)
@@ -42,6 +56,16 @@ $(NYST_OBJ) : $(NYST_SRC) $(NYST_DEPS)
 
 $(GKERNEL_OBJ) : $(GKERNEL_SRC) $(GKERNEL_DEPS)
 	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(GKERNEL_SRC) $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
+
+el2petsc : $(ELPSC_BIN)
+
+$(ELPSC_BIN) : $(ELPSC_SRC) $(ELPSC_DEPS)
+	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) $(ELPSC_SRC) $(PSC_INC) $(EL_LINK_FLAGS) $(PSC_LIB) $(EL_LIBS) -o $@
+
+askit : $(ASKIT_OBJ)
+
+$(ASKIT_OBJ) : $(ASKIT_SRC) $(ASKIT_DEPS)
+	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(ASKIT_SRC) $(KNN_INCS) $(ASK_INC) $(EL_LINK_FLAGS) $(KNN_LIBS) $(EL_LIBS) $(ASK_LIB) -o $@
 
 test_matvec.exe : matvec.cpp
 	$(CXX) $(EL_COMPILE_FLAGS) matvec.cpp $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
