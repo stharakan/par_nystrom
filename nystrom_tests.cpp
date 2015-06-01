@@ -1,4 +1,4 @@
-
+#include "El.hpp"
 #include "nystrom_alg.hpp"
 //#include "nystrom_utils.hpp"
 #include <string>
