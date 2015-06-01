@@ -44,6 +44,6 @@ std::vector<int> loc_exscan(std::vector<int> x);
  * and creates and elemental vector from it. The elemental vector must 
  * have an associated grid, but does not need to be correctly sized
  */
-void make_vec_from_loc(std::vector<double>& loc_vec, El::DistMatrix<double,VC,STAR> el_vec);
+void make_vec_from_loc(std::vector<double>& loc_vec, El::DistMatrix<double,VC,STAR>& el_vec);
 
 #endif

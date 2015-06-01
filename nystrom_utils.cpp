@@ -23,7 +23,7 @@ std::vector<int> loc_exscan(std::vector<int> x){
 	return y;
 }
 
-void make_vec_from_loc(std::vector<double>& loc_vec, El::DistMatrix<double,VC,STAR> el_vec){
+void make_vec_from_loc(std::vector<double>& loc_vec, El::DistMatrix<double,VC,STAR>& el_vec){
 	// Initialize
 	int nlocal = loc_vec.size();
 	int r,q,rq; //Grid sizes
