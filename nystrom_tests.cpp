@@ -58,13 +58,10 @@ double test_nystl(NystromAlg& nyst, double & cond){
 double test_nystmv2(NystromAlg& nyst,std::vector<int>& testIdx){
 	// Initialize
 	int testSize = testIdx.size();
-	if(mpi::WorldRank() ==0){std::cout << testSize <<std::endl;}
 	int ntrain = nyst.get_ntrain();
-	if(mpi::WorldRank() ==0){std::cout << ntrain <<std::endl;}
 	const Grid& g = nyst.K_nm.Grid();
 	std::vector<int> dummy_idx(1);
 	dummy_idx[0] = 0;
-	double rel_err = 0.0;
 
 
 	// Make vecs
@@ -75,29 +72,23 @@ double test_nystmv2(NystromAlg& nyst,std::vector<int>& testIdx){
 	DistMatrix<double,VC,STAR> mv2_ans(g);
 	
 	// Do full multiply and extract
-	//if(mpi::WorldRank() ==0){std::cout<< "Doing normal mv"<<std::endl;}
-	//mpi::Barrier(mpi::COMM_WORLD);
 	nyst.matvec(vec,full_ans);	
-	//if(mpi::WorldRank() ==0){std::cout<< "Subvector pull"<<std::endl;}
-	//mpi::Barrier(mpi::COMM_WORLD);
 	GetSubmatrix(full_ans,testIdx,dummy_idx,tru_ans);
+	full_ans.Empty();
 
 	// Form data for sample idx
-	//if(mpi::WorldRank() ==0){std::cout<< "Subdata pull"<<std::endl;}
-	//mpi::Barrier(mpi::COMM_WORLD);
 	DistMatrix<double> Xsub(g);
 	GetSubmatrix(*(nyst.ptrX),nyst.get_d(),testIdx,Xsub);
 
 	// Do other multiply
-	//if(mpi::WorldRank() ==0){std::cout<< "Doing weird mv"<<std::endl;}
-	//mpi::Barrier(mpi::COMM_WORLD);
-	nyst.matvec(&Xsub,vec, mv2_ans);
+  nyst.matvec(&Xsub,vec, mv2_ans);
+	Xsub.Empty();
+
 
 	Axpy(-1.0,tru_ans,mv2_ans);
 	double err = FrobeniusNorm(mv2_ans);
-	//if(mpi::WorldRank() ==0){std::cout << err <<std::endl;}
-	//if(mpi::WorldRank() ==0){std::cout << FrobeniusNorm(tru_ans) <<std::endl;}
-	rel_err =  err/FrobeniusNorm(tru_ans);
+	double base_norm = FrobeniusNorm(tru_ans);
+	double rel_err = err/base_norm;
 
 	return rel_err;
 }
@@ -563,7 +554,6 @@ int main(int argc, char* argv []){
 		// Test diff target/source multiply
 		double nyst_diff_err = test_nystmv2(nyst,testIdx);
 		if(proc==0){std::cout << "Diff targ/src err    : " << nyst_diff_err <<std::endl;}
-
 	}
 	//////////////////////////////
 
