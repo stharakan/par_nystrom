@@ -580,6 +580,71 @@ double NystromAlg::nullspace(DistMatrix<double,VC,STAR>& weights, DistMatrix<dou
 }
 
 
+void NystromAlg::matvec_errors(std::vector<double>& loc_weights,std::vector<int> testIdx,int runs,double& avg_err,double& avg_time){
+	// Initialize all the stuff we need
+	double tot_err = 0.0;
+	double tot_time = 0.0;
+	int testSize = testIdx.size();
+	int nlocal = loc_weights.size();
+	DistMatrix<double,VC,STAR> vec(ntrain,1,*g);
+	DistMatrix<double,VC,STAR> err(ntrain,1,*g);
+	DistMatrix<double,VC,STAR> err_sub(testSize,1,*g);
+
+	// Get offset
+	//int offset = mpi::GlobalRank() * nlocal; // Completely equal
+	int comms = mpi::Size(mpi::COMM_WORLD);
+	std::vector<int> sends(comms,nlocal);
+	std::vector<int> recvs(comms);
+	std::vector<int> offsets(comms);
+	mpi::AllToAll(&sends[0],1,&recvs[0],1,mpi::COMM_WORLD);
+	std::partial_sum(sends.begin(),sends.end(),offsets.begin());
+	int rank = mpi::WorldRank() - 1;
+	int offset;
+	if(rank==0){
+		offset = 0;
+	}else{
+		offset = offsets[rank];
+	}
+	
+	// Populate vec -- might be slow
+	for(int i=0;i<nlocal;i++){
+		vec.Set(offset + i, 1,loc_weights[i]);
+	}	
+
+	// Form true kernel for given sample idx
+	DistMatrix<double> Xsub(*g);
+	GetSubmatrix(*ptrX,d_idx,testIdx,Xsub);
+	DistMatrix<double> K(testSize,ntrain,*g);
+	gKernel.Kernel(Xsub,*ptrX,K);
+
+	// Approximate kernel-vec into ans, time
+	Fill(err,0.0);
+	Fill(err_sub,0.0);
+	Uniform(vec,ntrain,1);
+
+	double start = mpi::Time();
+	//if (mpi::WorldRank() == 0) {std::cout << "Approx matvec" <<std::endl;}
+	this->matvec(vec,err);
+	avg_time = mpi::Time() - start;
+	GetSubmatrix(err,testIdx,dummy_idx,err_sub);
+
+	// Find exact kernel-vec, subtract from ans
+	//if (mpi::WorldRank() == 0) {std::cout << "Exact matvec" <<std::endl;}
+	Gemv(NORMAL, -1.0,K,vec, 1.0,err_sub);
+	double abs_err = FrobeniusNorm(err_sub);
+
+	Fill(err_sub,0.0);
+	Gemv(NORMAL, 1.0,K,vec, 0.0,err_sub);
+	double base_norm = FrobeniusNorm(err_sub);
+	// Compute relative error
+	avg_err = abs_err /  base_norm;
+
+
+	// Empty and finalize data
+	vec.Empty();
+	err.Empty();
+}
+
 void NystromAlg::matvec_errors(std::vector<int> testIdx,int runs,double& avg_err,double& avg_time){
 	// Initialize all the stuff we need
 	double tot_err = 0.0;

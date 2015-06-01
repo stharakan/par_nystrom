@@ -14,6 +14,7 @@
 #include <time.h>
 #include <vector>
 #include <math.h>
+#include <numeric>
 
 
 using namespace El;
@@ -110,6 +111,14 @@ public:
 	 */
 	void matvec_errors(std::vector<int> testIdx,int runs,double& avg_err,double& avg_time); 
 
+	/*
+	 * Computes matvec error on a given set of weights, restriced to the 
+	 * vector chosen by testIdx. testIdx contains global indices of the testing 
+	 * set needed, while loc_weights, corresponds to the weights stored locally on the 
+	 * processor. 
+	 */
+	void matvec_errors(std::vector<double>& loc_weights, std::vector<int> testIdx,int runs,double& avg_err,double& avg_time); 
+	
 	/*
 	 * Performs regression on a given test data set/label combination.
 	 * Reports both classification error and regression (l2) error
