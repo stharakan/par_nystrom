@@ -51,6 +51,59 @@ double test_nystl(NystromAlg& nyst, double & cond){
 }
 
 /*
+ * Tests differing source/target multiply 
+ * by doing a normal multiply and extracting 
+ * test pts, then a diff mult and comparing
+ */
+double test_nystmv2(NystromAlg& nyst,std::vector<int>& testIdx){
+	// Initialize
+	int testSize = testIdx.size();
+	if(mpi::WorldRank() ==0){std::cout << testSize <<std::endl;}
+	int ntrain = nyst.get_ntrain();
+	if(mpi::WorldRank() ==0){std::cout << ntrain <<std::endl;}
+	const Grid& g = nyst.K_nm.Grid();
+	std::vector<int> dummy_idx(1);
+	dummy_idx[0] = 0;
+	double rel_err = 0.0;
+
+
+	// Make vecs
+	DistMatrix<double,VC,STAR> vec(g);
+	Uniform(vec,ntrain,1);
+	DistMatrix<double,VC,STAR> full_ans(g);
+	DistMatrix<double,VC,STAR> tru_ans(g);
+	DistMatrix<double,VC,STAR> mv2_ans(g);
+	
+	// Do full multiply and extract
+	//if(mpi::WorldRank() ==0){std::cout<< "Doing normal mv"<<std::endl;}
+	//mpi::Barrier(mpi::COMM_WORLD);
+	nyst.matvec(vec,full_ans);	
+	//if(mpi::WorldRank() ==0){std::cout<< "Subvector pull"<<std::endl;}
+	//mpi::Barrier(mpi::COMM_WORLD);
+	GetSubmatrix(full_ans,testIdx,dummy_idx,tru_ans);
+
+	// Form data for sample idx
+	//if(mpi::WorldRank() ==0){std::cout<< "Subdata pull"<<std::endl;}
+	//mpi::Barrier(mpi::COMM_WORLD);
+	DistMatrix<double> Xsub(g);
+	GetSubmatrix(*(nyst.ptrX),nyst.get_d(),testIdx,Xsub);
+
+	// Do other multiply
+	//if(mpi::WorldRank() ==0){std::cout<< "Doing weird mv"<<std::endl;}
+	//mpi::Barrier(mpi::COMM_WORLD);
+	nyst.matvec(&Xsub,vec, mv2_ans);
+
+	Axpy(-1.0,tru_ans,mv2_ans);
+	double err = FrobeniusNorm(mv2_ans);
+	//if(mpi::WorldRank() ==0){std::cout << err <<std::endl;}
+	//if(mpi::WorldRank() ==0){std::cout << FrobeniusNorm(tru_ans) <<std::endl;}
+	rel_err =  err/FrobeniusNorm(tru_ans);
+
+	return rel_err;
+}
+
+
+/*
  * Tests nyst by checking if U^T U = I
  * should be called before orthogonalization 
  */
@@ -506,6 +559,11 @@ int main(int argc, char* argv []){
 		// Test viability of eigendecomp in nyst
 		double nyst_eig_err = test_nysteig(nyst);
 		if(proc==0){std::cout << "Error from nyst eig  : " << nyst_eig_err <<std::endl;}
+
+		// Test diff target/source multiply
+		double nyst_diff_err = test_nystmv2(nyst,testIdx);
+		if(proc==0){std::cout << "Diff targ/src err    : " << nyst_diff_err <<std::endl;}
+
 	}
 	//////////////////////////////
 
