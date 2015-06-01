@@ -590,6 +590,7 @@ void NystromAlg::matvec_errors(std::vector<double>& loc_weights,std::vector<int>
 	DistMatrix<double,VC,STAR> err(ntrain,1,*g);
 	DistMatrix<double,VC,STAR> err_sub(testSize,1,*g);
 
+	/*
 	// Get offset
 	//int offset = mpi::GlobalRank() * nlocal; // Completely equal
 	int comms = mpi::Size(mpi::COMM_WORLD);
@@ -609,7 +610,10 @@ void NystromAlg::matvec_errors(std::vector<double>& loc_weights,std::vector<int>
 	// Populate vec -- might be slow
 	for(int i=0;i<nlocal;i++){
 		vec.Set(offset + i, 1,loc_weights[i]);
-	}	
+	}	*/
+
+	// Make el vector from local vecs
+	make_vec_from_loc(loc_weights,vec);
 
 	// Form true kernel for given sample idx
 	DistMatrix<double> Xsub(*g);

@@ -471,7 +471,19 @@ int main(int argc, char* argv []){
 	mpi::Reduce(&avg_mv_time,&max_avg_mv_time,1,mpi::MAX,0,mpi::COMM_WORLD);
 	if(proc==0){std::cout << "Matvec time          : " << max_avg_mv_time <<std::endl;}
 	if(proc==0){std::cout << "Relative error       : " << avg_mv_err << std::endl;}
+	
+	// Test other matvec_errors ( 1/sqrt(n) )
+	int nbigs = ntrain % mpicomms;
+	int loc_size = ntrain / mpicomms; //int div
+	if(proc < nbigs){loc_size += 1;}
 
+	std::vector<double> loc_weight(loc_size,1.0/sqrt(ntrain));
+	nyst.matvec_errors(loc_weight,testIdx,10,avg_mv_err,avg_mv_time);
+	
+	// Get timing
+	mpi::Reduce(&avg_mv_time,&max_avg_mv_time,1,mpi::MAX,0,mpi::COMM_WORLD);
+	if(proc==0){std::cout << "Mv time 1/sqrt(n)    : " << max_avg_mv_time <<std::endl;}
+	if(proc==0){std::cout << "Rel err 1/sqrt(n)    : " << avg_mv_err << std::endl;}
 	//////////////////////////////
 	
 	
