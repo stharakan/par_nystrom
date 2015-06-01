@@ -1,7 +1,10 @@
 #ifndef NYSTROM_UTILS_HPP_
 #define NYSTROM_UTILS_HPP_
 
-#include<vector>
+#include <vector>
+#include "El.hpp"
+
+using namespace El;
 
 /**
  * This class just holds the parameters needed for different kernel functions
@@ -29,20 +32,18 @@ class NystromInputs {
 		
 }; // class
 
-/**
- * Makes the test index set and returns it in testIdx
- * User should initialize testIdx to the appropriate length,
- * generally 1000
- *
-void make_testIdx(std::vector<int>& testIdx, int ntrain){
-	
-	int test_pts =  testIdx.size();
-	double step = ((double)ntrain)/((double) test_pts);
-	
-	for(int i=0;i<test_pts;i++){
-		int currIdx = (int)(i * step);
-		testIdx[i] = currIdx;
-	}
-}
-*/
+/*
+ * Local exclusive scan (every process will do an exclusive 
+ * scan on its own vector x)
+ */
+std::vector<int> loc_exscan(std::vector<int> x);
+
+/*
+ * Takes contiguous local data (i.e. process 0 owns the first 
+ * nlocal elements of the global vector, process 1 the next, etc.) 
+ * and creates and elemental vector from it. The elemental vector must 
+ * have an associated grid, but does not need to be correctly sized
+ */
+void make_vec_from_loc(std::vector<double>& loc_vec, El::DistMatrix<double,VC,STAR> el_vec);
+
 #endif
