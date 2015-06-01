@@ -154,6 +154,10 @@ public:
 		samp_flag = false;
 	}
 
+	/*
+	 * Returns ntrain
+	 */
+	int get_ntrain(){return ntrain;}
 
 private:
 

@@ -381,7 +381,7 @@ void NystromAlg::matvec(DistMatrix<double>* Xtest, DistMatrix<double,VC,STAR>& w
 	// Compute K_nm * w, may or may not include small U factor
 	DistMatrix<double, VC, STAR> Kw(nystrom_samples,1,*g);
 	Fill(Kw,0.0);
-	Gemv(NORMAL,1.0,K_nm,weights,1.0,Kw);
+	Gemv(TRANSPOSE,1.0,K_nm,weights,1.0,Kw);
 
 	DistMatrix<double,VC,STAR> dummy(*g);
 	
@@ -391,17 +391,18 @@ void NystromAlg::matvec(DistMatrix<double>* Xtest, DistMatrix<double,VC,STAR>& w
 		dummy.Resize(nystrom_rank,1);
 		Fill(dummy,0.0);
 		Gemv(TRANSPOSE,1.0,U,Kw,1.0,dummy);
-
+ 
 		DiagonalScale(LEFT,NORMAL,L,dummy);
 	}
 	else{
-		// Scale by D, then apply U
+		// Scale by D
 		dummy = Kw;
 		DiagonalScale(LEFT,NORMAL,D,dummy);
 		
 	}
 
 	// Multiply by U (same in either case)
+	Kw.Resize(U.Height(),1);
 	Fill(Kw,0.0);
 	Gemv(NORMAL,1.0,U,dummy,1.0,Kw);
 	dummy.EmptyData();
