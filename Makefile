@@ -22,6 +22,10 @@ ASK_INC = -I$(ASKIT_DIR)/src/
 ALL_INCS = $(EL_LINK_FLAGS) -I./ $(KNN_INCS) $(CMD_INC) 
 ALL_LIBS = -L./ $(EL_LIBS) $(KNN_LIBS) $(CMD_LIB) $(NYST_INC)
 
+
+UTIL_OBJ = nystrom_utils.o
+UTIL_SRC = nystrom_utils.cpp
+UTIL_DEP = nystrom_utils.hpp
 ASKIT_OBJ = askit_el_utils.o
 ASKIT_SRC = askit_el_utils.cpp
 ASKIT_DEPS = askit_el_utils.hpp
@@ -41,7 +45,7 @@ MAIN_DEPS = nystrom_alg.hpp nystrom_utils.hpp kernel_inputs.hpp
 
 
 
-ALL_OBJS = $(MAIN_OBJ) $(GKERNEL_OBJ) $(NYST_OBJ)
+ALL_OBJS = $(MAIN_OBJ) $(GKERNEL_OBJ) $(NYST_OBJ) $(UTIL_OBJ)
 
 all : $(MAIN_BIN)
 
@@ -56,6 +60,9 @@ $(NYST_OBJ) : $(NYST_SRC) $(NYST_DEPS)
 
 $(GKERNEL_OBJ) : $(GKERNEL_SRC) $(GKERNEL_DEPS)
 	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(GKERNEL_SRC) $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
+
+$(UTIL_OBJ) : $(UTIL_SRC) $(UTIL_DEP)
+	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(UTIL_SRC) $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
 el2petsc : $(ELPSC_BIN)
 
