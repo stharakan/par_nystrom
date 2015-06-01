@@ -3,14 +3,14 @@ module load impi
 
 EMAIL=sameer@ices.utexas.edu
 DATA_DIR=/work/00921/biros/maverick/data/machine_learning/
-#DATA=uni3d
-#TR_FILE=uniform_3d_4m.bin
-#N=4000000
-#D=3
-DATA=susy
-TR_FILE=susy.icml.trn.X.bin
-N=4500000
-D=18
+DATA=uni3d
+TR_FILE=uniform_3d_4m.bin
+N=4000000
+D=3
+#DATA=susy
+#TR_FILE=susy.icml.trn.X.bin
+#N=4500000
+#D=18
 TASKS_PER_NODE=20
 MULT=1
 
@@ -18,18 +18,18 @@ for NODES in 16
 do
 TOT_TASKS=$((NODES*TASKS_PER_NODE))
 
-for SIG in 0.05
+for SIG in .1 
 do
-for RANK in 8192 
+for RANK in 4096
 do
 SAMP=$((MULT*RANK))
 cat <<EOS | sbatch
 #!/bin/bash
 #SBATCH -J $DATA.$RANK.$NODES          # job name
-#SBATCH -o test$MULT.$DATA.h$SIG.r$RANK.n$NODES.t$TASKS_PER_NODE.out0      # output and error file name (%j expands to jobID)
+#SBATCH -o test$MULT.$DATA.h$SIG.r$RANK.n$NODES.t$TASKS_PER_NODE.out     # output and error file name (%j expands to jobID)
 #SBATCH -n $TOT_TASKS          # total number of mpi tasks requested
 #SBATCH -N $NODES          # total number of nodes (2 sockets / node)
-#SBATCH -p gpu             # queue (partition) -- normal, development, etc.
+#SBATCH -p vis            # queue (partition) -- normal, development, etc.
 #SBATCH -t 1:30:00        # run time (hh:mm:ss) - 1.5 hours
 #SBATCH -A PADAS           # Project
 #SBATCH --mail-user=$EMAIL

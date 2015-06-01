@@ -42,7 +42,7 @@ SAMP=$((RANK*MULT))
 cat <<EOS | sbatch
 #!/bin/bash
 #SBATCH -J $DATA.$RANK.$NODES          # job name
-#SBATCH -o $DATA.h$SIG.r$RANK.s$SAMP.n$NODES.t$TASKS_PER_NODE.out       # output and error file name (%j expands to jobID)
+#SBATCH -o $DATA.h$SIG.r$RANK.s$SAMP.n$NODES.t$TASKS_PER_NODE.out0       # output and error file name (%j expands to jobID)
 #SBATCH -n $TOT_TASKS          # total number of mpi tasks requested
 #SBATCH -N $NODES          # total number of nodes (2 sockets / node)
 #SBATCH -p gpu             # queue (partition) -- normal, development, etc.
