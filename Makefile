@@ -1,4 +1,5 @@
-include $(EL_DIR)/conf/ElVars
+include $(EL_DIR).dev/conf/ElVars
+
 CPP_FLAGS = -openmp -O3 -std=c++11  
 KNN_INCS =  -I$(KNN_DIR)/generator/ \
             -I$(KNN_DIR)/include/ \
