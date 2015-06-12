@@ -8,37 +8,33 @@ using std::string;
 NystromAlg::NystromAlg(DistMatrix<double>* _ptrX, int _samp, int _rank, GaussKernel _gKernel, DistMatrix<double,VC,STAR>* _ptrY):
 	gKernel(_gKernel)
 {
+	// Constants
 	int proc = mpi::WorldRank();
 	ptrX = _ptrX;
 	ptrY = _ptrY;
 	g = & (ptrX->Grid());
-	//DistMatrix<double,VC,STAR> dummy(1,1,*_g);
-	//ptrY = &dummy; //TODO change this
 	dim             = _ptrX->Height();
 	ntrain          = _ptrX->Width(); 
 	nystrom_rank    = _rank;
 	nystrom_samples = _samp;
 	trunc_flag = nystrom_rank != nystrom_samples;
 
+	// Indexes and ranges
+	d_idx.resize(dim);
+	dummy_idx.resize(1);
+	dummy_idx[0] = 0;
+	for(int i=0;i<dim;i++){ d_idx[i] = i;} //TODO omp this loop?
+	dummy_rng = Range<int>(0,1);
+	s_rng = Range<int>(0,nystrom_rank);
+	l_rng = Range<int>(0,nystrom_samples);
 
+	// Set grids
 	L.SetGrid(*g);
 	D.SetGrid(*g);
 	U.SetGrid(*g);
 	K_nm.SetGrid(*g);
 	
-	//l_idx.resize(nystrom_samples);
-	//s_idx.resize(nystrom_rank); //TODO Uncomment if we are orthogonalizing
-	d_idx.resize(dim);
-	dummy_idx.resize(1);
-	dummy_idx[0] = 0;
-	s_idx.resize(nystrom_rank);
-	l_idx.resize(nystrom_samples);
-	for(int i=0;i<nystrom_samples;i++){ l_idx[i] = i;} //TODO omp this loop?
-	for(int i=0;i<nystrom_rank;i++){ s_idx[i] = i;} //TODO omp this loop?
-	for(int i=0;i<dim;i++){ d_idx[i] = i;} //TODO omp this loop?
-
 	// Allocate memory or at least try to
-	
 	D.Resize(nystrom_rank,1);
 	Fill(D,0.0);
 	L.Resize(nystrom_rank,1);
@@ -79,15 +75,14 @@ NystromAlg::NystromAlg(DistMatrix<double>* _ptrX, double _h, int _samp, int _ran
 	U.SetGrid(*g);
 	K_nm.SetGrid(*g);
 	
-	// Indices
+	// Indices and Ranges
 	d_idx.resize(dim);
 	dummy_idx.resize(1);
 	dummy_idx[0] = 0;
-	s_idx.resize(nystrom_rank);
-	l_idx.resize(nystrom_samples);
-	for(int i=0;i<nystrom_samples;i++){ l_idx[i] = i;} //TODO omp this loop?
-	for(int i=0;i<nystrom_rank;i++){ s_idx[i] = i;} //TODO omp this loop?
 	for(int i=0;i<dim;i++){ d_idx[i] = i;} //TODO omp this loop?
+	dummy_rng = Range<int>(0,1);
+	s_rng = Range<int>(0,nystrom_rank);
+	l_rng = Range<int>(0,nystrom_samples);
 
 	// Allocate
 	D.Resize(nystrom_rank,1);
@@ -156,12 +151,13 @@ void NystromAlg::decomp(bool do_orth){
 			//if(mpi::WorldRank() == 0){std::cout <<"truncating" <<std::endl;}
 			DiagonalSolve(RIGHT,NORMAL,Lmm,Umm);
 			if (trunc_flag){ // need to take a subsample
-				//GetSubmatrix(Umm,l_idx,s_idx,U);
-				//GetSubmatrix(Lmm,s_idx,dummy_idx,L);
-				DistMatrix<double> Id(*g);
-				Identity(Id, nystrom_samples, nystrom_rank);
-				Gemm(NORMAL,NORMAL, 1.0,Umm,Id, 0.0,U);
-				Gemv(TRANSPOSE, 1.0,Id,Lmm, 0.0,L);
+				// get submatrices
+				GetSubmatrix(Umm,l_rng,s_rng,U);
+				GetSubmatrix(Lmm,s_rng,dummy_rng,L);
+				//DistMatrix<double> Id(*g);
+				//Identity(Id, nystrom_samples, nystrom_rank);
+				//Gemm(NORMAL,NORMAL, 1.0,Umm,Id, 0.0,U);
+				//Gemv(TRANSPOSE, 1.0,Id,Lmm, 0.0,L);
 			}
 			else{
 				U = Umm;
@@ -334,7 +330,7 @@ void NystromAlg::qr_orthog(){
 
 	//Form R
 	DistMatrix<double> R(*g);
-	GetSubmatrix(KU,s_idx,s_idx,R); //TODO Make this more efficient
+	GetSubmatrix(KU,s_rng,s_rng,R); //TODO Make this more efficient
 	//KU.Resize(t.Height(),KU.Width());
 	//auto R(KU);
 	KU.Empty();
@@ -423,41 +419,6 @@ void NystromAlg::matvec(DistMatrix<double>* Xtest, DistMatrix<double,VC,STAR>& w
 	Gemv(NORMAL,1.0,K_tm,Kw,1.0,out);
 }
 
-//void NystromAlg::os_matvec(DistMatrix<double,VC,STAR>& weights, DistMatrix<double,VC,STAR>& out){
-//	// Assume oneshot, so  out = K_nm V S V^T K_nm^T weights
-//	
-//	if(qr_flag){
-//		if(mpi::WorldRank() == 0){std::cout << "ERROR: Cannot run orthog and os, K-nm is overwritten" <<std::endl;}
-//		return;
-//	}
-//	if(!os_flag){
-//		if(mpi::WorldRank() == 0){std::cout << "Need to run one shot before multiply " <<std::endl;}
-//		this->os_orthog();
-//	}	
-//
-//	DistMatrix<double, VC, STAR> Kw(K_nm.Width(),1,*g);
-//	Fill(Kw,0.0);
-//	Gemv(TRANSPOSE,1.0,K_nm,weights,1.0,Kw);
-//
-//	DistMatrix<double,VC, STAR> dummy(V.Width(),1,*g);
-//	Fill(dummy,0.0);
-//
-//	Gemv(TRANSPOSE,1.0,V,Kw,1.0,dummy);
-//
-//	DiagonalScale(LEFT,NORMAL,S,dummy);
-//
-//	Fill(Kw,0.0);
-//	Gemv(NORMAL,1.0,V,dummy,1.0,Kw);
-//	dummy.Empty();
-//
-//	// Set up output vector properly
-//	out.Resize(ntrain,1);
-//	Fill(out,0.0);
-//
-//	// Finish by applying K_nm
-//	Gemv(NORMAL,1.0,K_nm,Kw,1.0,out);
-//}
-
 void NystromAlg::matvec(DistMatrix<double,VC,STAR>& weights, DistMatrix<double,VC,STAR>& out){
 	// IF we have orthogonalized, out = K_nm D K_nm^T weights
 	// IF we have only decomped,  out = K_nm U L U^T K_nm^T weights
@@ -512,6 +473,7 @@ void NystromAlg::appinv(DistMatrix<double,VC,STAR>& rhs, DistMatrix<double,VC,ST
 		auto rKw(Kw);
 		auto rD(D);
 
+		// TODO use getsubmatrix for safety
 		rD.Resize(r,1);
 		rKw.Resize(r,1);
 

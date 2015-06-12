@@ -96,14 +96,14 @@ public:
 	 * the result. Inverts using only r columns of U, but default 
 	 * is set to use all cols
 	 */
-	void appinv(DistMatrix<double,VC,STAR>& rhs, DistMatrix<double,VC,STAR>& x,int r = 0); //TODO deal with parameter at the end
+	void appinv(DistMatrix<double,VC,STAR>& rhs, DistMatrix<double,VC,STAR>& x,int r = 0);
 
 	/*
 	 * Nullspace calculator: calculates and returns portion of vector not 
 	 * in the columnspace of first r columns of U. Also returns the norm 
 	 * of this vector. Default for r is set to use all cols.
 	 */
-	double nullspace(DistMatrix<double,VC,STAR>& weights, DistMatrix<double,VC,STAR>& null_vec, int r = 0); //TODO write
+	double nullspace(DistMatrix<double,VC,STAR>& weights, DistMatrix<double,VC,STAR>& null_vec, int r = 0); 
 
 	/*
 	 * Computes the average matvec error and time to compute it 
@@ -190,7 +190,10 @@ private:
 	int nystrom_samples;
 
 	// Store all the indices we'll need
-	std::vector<int> s_idx,l_idx,d_idx,dummy_idx;
+	std::vector<int> d_idx,dummy_idx;
+
+	// Store ranges we'll need
+	Range<int> s_rng,l_rng,dummy_rng;
 
 	// Store the sample index
 	std::vector<int> smpIdx;
