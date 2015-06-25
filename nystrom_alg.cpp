@@ -229,8 +229,8 @@ void NystromAlg::os_orthog(){
 	std::iota(full_idx.begin(),full_idx.end(),0);
 	std::set_difference(full_idx.begin(),full_idx.end(),smpIdx.begin(),smpIdx.end(),oth_idx.begin());
 
-	// Pick out parts of the kernel matrix (currently recalculating //TODO)
-	if(0){
+	// Pick out parts of the kernel matrix //TODO test if this works
+	if(1){
 		GetSubmatrix(K_nm,oth_idx,smpIdx,B); //K_(n-m),m 
 		GetSubmatrix(K_nm,smpIdx,smpIdx,A); //K_mm
 	}else{
