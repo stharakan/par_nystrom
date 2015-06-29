@@ -1,7 +1,12 @@
 #!/bin/bash
 module load impi
 
+# Email variables
 EMAIL=sameer@ices.utexas.edu
+BEG=
+FIN=
+
+# Data variables
 DATA_DIR=/work/00921/biros/maverick/data/machine_learning/
 DATA=uni3d
 TR_FILE=uniform_3d_4m.bin
@@ -11,10 +16,14 @@ D=3
 #TR_FILE=susy.icml.trn.X.bin
 #N=4500000
 #D=18
+
+# No. of MPI tasks
 TASKS_PER_NODE=20
+
+# Determines amount of sampling
 MULT=1
 
-for NODES in 16
+for NODES in 8 
 do
 TOT_TASKS=$((NODES*TASKS_PER_NODE))
 
@@ -26,15 +35,15 @@ SAMP=$((MULT*RANK))
 cat <<EOS | sbatch
 #!/bin/bash
 #SBATCH -J $DATA.$RANK.$NODES          # job name
-#SBATCH -o test$MULT.$DATA.h$SIG.r$RANK.n$NODES.t$TASKS_PER_NODE.out     # output and error file name (%j expands to jobID)
+#SBATCH -o git$MULT.$DATA.h$SIG.r$RANK.n$NODES.t$TASKS_PER_NODE.out     # output and error file name (%j expands to jobID)
 #SBATCH -n $TOT_TASKS          # total number of mpi tasks requested
 #SBATCH -N $NODES          # total number of nodes (2 sockets / node)
 #SBATCH -p vis            # queue (partition) -- normal, development, etc.
-#SBATCH -t 1:30:00        # run time (hh:mm:ss) - 1.5 hours
+#SBATCH -t 0:05:00        # run time (hh:mm:ss) - 1.5 hours
 #SBATCH -A PADAS           # Project
 #SBATCH --mail-user=$EMAIL
-##SBATCH --mail-type=end    # email me when the job finishes
-
+##SBATCH --mail-type=$BEG    # email me when the job starts
+##SBATCH --mail-type=$FIN    # email me when the job finishes
 
 cd ${WORK}/research/par_nystrom
 
