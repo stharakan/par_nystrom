@@ -1,6 +1,7 @@
 #include "El.hpp"
 #include "nystrom_alg.hpp"
 //#include "nystrom_utils.hpp"
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -348,11 +349,11 @@ int main(int argc, char* argv []){
 	const double sigma     = Input("--sigma","kernel bandwidth", 1.0);
 
 	// Nystrom params
-	const int nyst_rank          = Input("--rank","Nystrom rank",min(1024,ntrain));
-	const int nyst_samp          = Input("--samp","Nystrom samp",min(2*nyst_rank,ntrain));
+	const int nyst_rank          = Input("--rank","Nystrom rank",std::min(1024,ntrain));
+	const int nyst_samp          = Input("--samp","Nystrom samp",std::min(2*nyst_rank,ntrain));
 
 	// Error comp
-	const int test_pts     = Input("--testpts","# of testing points",min(1000, ntrain));
+	const int test_pts     = Input("--testpts","# of testing points",std::min(1000, ntrain));
 
 	// Test data (can be null)
 	const string tedataloc = Input("--tedata","test data file","");
