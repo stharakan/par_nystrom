@@ -1,18 +1,6 @@
-include $(EL_DIR).dev/conf/ElVars
+include $(EL_DIR)/conf/ElVars
 
 CPP_FLAGS = -openmp -O3 -std=c++11  
-KNN_INCS =  -I$(KNN_DIR)/generator/ \
-            -I$(KNN_DIR)/include/ \
-            -I$(KNN_DIR)/include/binTree/ \
-            -I$(KNN_DIR)/include/direct_knn/ \
-            -I$(KNN_DIR)/include/repartition/ \
-            -I$(KNN_DIR)/include/lsh \
-            -I$(KNN_DIR)/include/stTree \
-            -I$(KNN_DIR)/include/parallelIO 
-KNN_LIBS = -L$(KNN_DIR)/build -lknn -lrrot
-
-CMD_INC = -I${KNN_DIR}/external/cmd/
-CMD_LIB = -L${KNN_DIR}/build -lcmd
 
 PSC_INC = -I$(PETSC_DIR)/include
 PSC_LIB = -L$(PETSC_DIR)/lib -lpetsc
@@ -20,9 +8,8 @@ PSC_LIB = -L$(PETSC_DIR)/lib -lpetsc
 ASK_LIB = -L$(ASKIT_DIR)/build/ -laskit 
 ASK_INC = -I$(ASKIT_DIR)/src/
 
-ALL_INCS = $(EL_LINK_FLAGS) -I./ $(KNN_INCS) $(CMD_INC) 
-ALL_LIBS = -L./ $(EL_LIBS) $(KNN_LIBS) $(CMD_LIB) $(NYST_INC)
-
+ALL_INCS = -I./ $(EL_LINK_FLAGS)  
+ALL_LIBS = -L./ $(EL_LIBS) $(NYST_INC)
 
 UTIL_OBJ = nystrom_utils.o
 UTIL_SRC = nystrom_utils.cpp

@@ -1,4 +1,8 @@
 #include "nystrom_utils.hpp"
+#include <algorithm>
+#include <math.h>
+#include <iostream>
+#include <vector>
 
 using namespace El;
 
@@ -124,4 +128,35 @@ void make_vec_from_loc(std::vector<double>& loc_vec, El::DistMatrix<double,VC,ST
 	
 
 }
+
+
+// give m different random int in a range [0, N)
+void randperm(int m, int N, std::vector<int>& arr)
+{
+
+	if(m > N) { 
+		std::cout<<" m must <= N"<<std::endl;
+		return;
+	}
+
+	arr.resize(m);
+	for(int i = 0; i <arr.size(); i++) {
+		double tmp = floor( (double)N*(double)rand()/(double)RAND_MAX );
+		arr[i] = (int)tmp;
+	}
+	std::sort(arr.begin(), arr.end());
+	std::vector<int>::iterator it = std::unique(arr.begin(), arr.end());
+	arr.resize(it - arr.begin());
+
+	int pp = m;
+	while(arr.size() < m) {
+		pp++;
+		double tmp = floor( (double)N*(double)rand()/(double)RAND_MAX );
+		arr.push_back((int)tmp);
+		std::sort(arr.begin(), arr.end());
+		std::vector<int>::iterator it = std::unique(arr.begin(), arr.end());
+		arr.resize(it - arr.begin());
+	}
+}
+
 

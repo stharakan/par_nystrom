@@ -46,4 +46,9 @@ std::vector<int> loc_exscan(std::vector<int> x);
  */
 void make_vec_from_loc(std::vector<double>& loc_vec, El::DistMatrix<double,VC,STAR>& el_vec);
 
+/*
+ * Spits out random m integers in the range [0,N)
+ */
+void randperm(int m, int N, std::vector<int>& arr);
+
 #endif
