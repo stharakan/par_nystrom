@@ -107,80 +107,87 @@ NystromAlg::~NystromAlg(){
 }
 	
 void NystromAlg::decomp(bool do_orth){
-		if (!dcmp_flag){
-			// Random sample of size nystrom_samples
-			if (samp_flag){
-				smpIdx.resize(nystrom_samples);	
+	bool print = mpi::WorldRank() == 0;
 
-				//TODO Share among processes?
-				if(mpi::WorldRank() == 0){
-					randperm(nystrom_samples,ntrain,smpIdx);
-					//std::cout << "Sample idx" << std::endl;
-					for (int i=0;i<nystrom_samples;i++){
-						//smpIdx[i] = i;
-						//std::cout << smpIdx[i] << std::endl;
-					}
-					std::sort(smpIdx.begin(),smpIdx.end());
+	if (!dcmp_flag){
+		// Random sample of size nystrom_samples
+		if (samp_flag){
+			smpIdx.resize(nystrom_samples);	
+
+			//TODO Share among processes?
+			if(mpi::WorldRank() == 0){
+				randperm(nystrom_samples,ntrain,smpIdx);
+				//std::cout << "Sample idx" << std::endl;
+				for (int i=0;i<nystrom_samples;i++){
+					//smpIdx[i] = i;
+					//std::cout << smpIdx[i] << std::endl;
 				}
-
-				//Send vector to everybody else
-				mpi::Broadcast(&smpIdx[0], nystrom_samples, 0, mpi::COMM_WORLD);
+				std::sort(smpIdx.begin(),smpIdx.end());
 			}
-			
-			// Sample from data
-			//if(mpi::WorldRank() == 0){std::cout << "sample"<<std::endl;}
-			DistMatrix<double> Xsub(*g);
-			GetSubmatrix(*ptrX,d_idx,smpIdx,Xsub); 
-			//Print(Xsub,"X_sub");	
-			
-			// Fill K_mm with kernel values 
-			//if(mpi::WorldRank() == 0){std::cout << "small kernel"<<std::endl;}
-			DistMatrix<double> K_mm(nystrom_samples,nystrom_samples,*g);
-			gKernel.SelfKernel(Xsub, K_mm);
-			//Print(K_mm,"K_mm");
 
-			// Take Eigendecomp of subsampled matrix
-			//if(mpi::WorldRank() == 0){std::cout << "Eig" << std::endl;}
-			auto mmCopy(K_mm);
-			DistMatrix<double> Umm(*g);
-			DistMatrix<double,VC,STAR> Lmm(*g);
-			HermitianEig(UPPER,mmCopy,Lmm,Umm,DESCENDING);
-			mmCopy.Empty();
+			//Send vector to everybody else
+			mpi::Broadcast(&smpIdx[0], nystrom_samples, 0, mpi::COMM_WORLD);
+		}
 
-			// Truncate
-			//if(mpi::WorldRank() == 0){std::cout <<"truncating" <<std::endl;}
-			DiagonalSolve(RIGHT,NORMAL,Lmm,Umm);
-			if (trunc_flag){ // need to take a subsample
-				// get submatrices
-				GetSubmatrix(Umm,l_rng,s_rng,U);
-				GetSubmatrix(Lmm,s_rng,dummy_rng,L);
-				//DistMatrix<double> Id(*g);
-				//Identity(Id, nystrom_samples, nystrom_rank);
-				//Gemm(NORMAL,NORMAL, 1.0,Umm,Id, 0.0,U);
-				//Gemv(TRANSPOSE, 1.0,Id,Lmm, 0.0,L);
-			}
-			else{
-				U = Umm;
-				L = Lmm;
-			}
-			Umm.Empty();
-			Lmm.Empty();
+		// Sample from data
+		if(print){std::cout << "sample"<<std::endl;}
+		mpi::Barrier(mpi::COMM_WORLD);
+		DistMatrix<double> Xsub(*g);
+		GetSubmatrix(*ptrX,d_idx,smpIdx,Xsub); 
+		//Print(Xsub,"X_sub");	
 
-			// Compute K_nm
-			//if(mpi::WorldRank() == 0){std::cout << "Gen large kernel" << std::endl;}
-			gKernel.Kernel(*ptrX,Xsub,K_nm);	
+		// Fill K_mm with kernel values 
+		if(print){std::cout << "small kernel"<<std::endl;}
+		mpi::Barrier(mpi::COMM_WORLD);
+		DistMatrix<double> K_mm(nystrom_samples,nystrom_samples,*g);
+		gKernel.SelfKernel(Xsub, K_mm);
+		//Print(K_mm,"K_mm");
 
+		// Take Eigendecomp of subsampled matrix
+		auto mmCopy(K_mm);
+		DistMatrix<double> Umm(*g);
+		DistMatrix<double,VC,STAR> Lmm(*g);
+		//Print(mmCopy,"Matrix");
+		if(print){std::cout << "Eig" << std::endl;}
+		mpi::Barrier(mpi::COMM_WORLD);
+		HermitianEig(UPPER,mmCopy,Lmm,Umm,DESCENDING);
+		mmCopy.Empty();
 
-			dcmp_flag = true;
+		// Truncate
+		if(print){std::cout <<"truncating" <<std::endl;}
+		mpi::Barrier(mpi::COMM_WORLD);
+		DiagonalSolve(RIGHT,NORMAL,Lmm,Umm);
+		if (trunc_flag){ // need to take a subsample
+			// get submatrices
+			//GetSubmatrix(Umm,l_rng,s_rng,U);
+			//GetSubmatrix(Lmm,s_rng,dummy_rng,L);
+			DistMatrix<double> Id(*g);
+			Identity(Id, nystrom_samples, nystrom_rank);
+			Gemm(NORMAL,NORMAL, 1.0,Umm,Id, 0.0,U);
+			Gemv(TRANSPOSE, 1.0,Id,Lmm, 0.0,L);
 		}
 		else{
-			if(mpi::WorldRank() == 0){std::cout << "Decomposition already performed!" << std::endl;}
+			U = Umm;
+			L = Lmm;
 		}
+		Umm.Empty();
+		Lmm.Empty();
 
-		// Run orthogonalization if required
-		if(do_orth){
-			this->orthog();
-		}
+		// Compute K_nm
+		if(print){std::cout << "Gen large kernel" << std::endl;}
+		mpi::Barrier(mpi::COMM_WORLD);
+		gKernel.Kernel(*ptrX,Xsub,K_nm);	
+
+		dcmp_flag = true;
+	}
+	else{
+		if(mpi::WorldRank() == 0){std::cout << "Decomposition already performed!" << std::endl;}
+	}
+
+	// Run orthogonalization if required
+	if(do_orth){
+		this->orthog();
+	}
 }
 
 void NystromAlg::orthog(){
@@ -206,7 +213,7 @@ void NystromAlg::os_orthog(){
 	// Functions needed for later
 	auto elem_sqrt = [](double x){return (sqrt(x));};
 	auto elem_32rt = [](double x){return (x * sqrt(x));};
-	bool print = mpi::WorldRank() == -1;
+	bool print = mpi::WorldRank() == 0;
 
 	// Allocate extra mem -- A, U_os, L_os; class vars -- V, S
 	if(print){std::cout << "Allocating mem"<<std::endl;}
@@ -230,7 +237,8 @@ void NystromAlg::os_orthog(){
 	std::set_difference(full_idx.begin(),full_idx.end(),smpIdx.begin(),smpIdx.end(),oth_idx.begin());
 
 	// Pick out parts of the kernel matrix //TODO test if this works
-	if(1){
+	if(print){std::cout << "Splitting K_nm"<<std::endl;}
+	if(0){
 		GetSubmatrix(K_nm,oth_idx,smpIdx,B); //K_(n-m),m 
 		GetSubmatrix(K_nm,smpIdx,smpIdx,A); //K_mm
 	}else{
@@ -246,20 +254,23 @@ void NystromAlg::os_orthog(){
 
 		// Compute kernels (symmetric if we can)
 		gKernel.Kernel(Xoth,Xsub,B);
-		if(trunc_flag){
-			gKernel.Kernel(Xsub,Xsub,A);
-		}else{
-			gKernel.SelfKernel(Xsub,A);
-		}
+		gKernel.Kernel(Xsub,Xsub,A);
+		//if(trunc_flag){
+		//	gKernel.Kernel(Xsub,Xsub,A);
+		//}else{
+		//	gKernel.SelfKernel(Xsub,A);
+		//}
 		Xoth.Empty();
 		Xsub.Empty();
 	}
 
 	// First make B^T B
-	Syrk(UPPER,ADJOINT,1.0,B, 0.0,U); 
+	if(print){std::cout << "Make bTb"<<std::endl;}
+	Herk(UPPER,ADJOINT,1.0,B, 0.0,U); 
 	B.Empty();
 
 	// Form Ahalf
+	if(print){std::cout << "Make ahalf"<<std::endl;}
 	EntrywiseMap(L_os,function<double(double)>(elem_32rt));// Ahalf = K_mm^-1/2 
 	DiagonalScale(RIGHT,NORMAL, L_os, U_os); // U_os = U L^-1/2 //TODO change this to Syrk (half comp)
 	Gemm(NORMAL,TRANSPOSE, 1.0,U_os,Ucopy, 0.0,Ahalf); // Ahalf = U_os * U^T
@@ -273,6 +284,7 @@ void NystromAlg::os_orthog(){
 	}
 	
 	// Form Kmm^-1/2 B^T B K_mm^-1/2 (inner matrix is changed if trunc)
+	if(print){std::cout << "Kmm^-1/2 B^T B Kmm^-1/2" <<std::endl;}
 	B.Resize(nystrom_samples,nystrom_samples); //  B = V * Ahalf; empty V
 	Fill(B,0.0);
 	Symm(LEFT,UPPER, 1.0,U,Ahalf, 0.0, B); 
@@ -280,6 +292,12 @@ void NystromAlg::os_orthog(){
 			
 	// A = K_mm + Kmm^-1/2 * B^T B K_mm^-1/2
 	Gemm(NORMAL,NORMAL, 1.0,Ahalf,B, 1.0, A); 
+	//if(trunc_flag){
+	//	Gemm(NORMAL,NORMAL, 1.0,Ahalf,B, 0.0, A); 
+	//}
+	//else{
+	//	Gemm(NORMAL,NORMAL, 1.0,Ahalf,B, 1.0, A); 
+	//}
 	B.Empty();
 	
 
@@ -317,34 +335,42 @@ void NystromAlg::qr_orthog(){
 	Fill(KU,0.0);
 	Gemm(NORMAL,NORMAL,1.0,K_nm,U,1.0,KU);
 	K_nm.EmptyData(); //Don't need this until later
+	bool print = mpi::WorldRank() == 0;
 
 	//Take the QR
+	if(print){std::cout << "qr"<<std::endl;}
 	DistMatrix<double,MD,STAR> t(*g);
 	DistMatrix<double,MD,STAR> d(*g);
 	QR(KU,t,d);
 
 	// Form and restrict large Q
+	if(print){std::cout << "form q and restrict"<<std::endl;}
 	DistMatrix<double> Q_nm(*g);
 	Identity(Q_nm,ntrain,nystrom_rank);
 	qr::ApplyQ(LEFT,NORMAL,KU,t,d,Q_nm);
 
 	//Form R
-	DistMatrix<double> R(*g);
-	GetSubmatrix(KU,s_rng,s_rng,R); //TODO Make this more efficient
-	//KU.Resize(t.Height(),KU.Width());
-	//auto R(KU);
+	if(print){std::cout << KU.Height() << " x "<< KU.Width() <<std::endl;}
+	mpi::Barrier(mpi::COMM_WORLD);
+	if(print){std::cout << "form r"<<std::endl;}
+	//DistMatrix<double> R(*g);
+	//GetSubmatrix(KU,s_rng,s_rng,R); //TODO Make this more efficient
+	KU.Resize(t.Height(),KU.Width());
+	auto R(KU);
 	KU.Empty();
 	t.Empty();
 	d.Empty();
 	MakeTrapezoidal(UPPER,R);
 
 	// Form R L R^T
+	if(print){std::cout << "form rlrt"<<std::endl;}
 	auto elem_sqrt = [](double x){return (sqrt(x));};
 	EntrywiseMap(L,function<double(double)>(elem_sqrt));
 	DiagonalScaleTrapezoid(RIGHT,UPPER,NORMAL,L,R); // Now R_curr = R_true L^(1/2) 
 	Trtrmm(UPPER,R); // Now R_curr = R_old R_old^T  = R_true L R_true
 
 	// Eigendecompose that product
+	if(print){std::cout << "eig rlrt"<<std::endl;}
 	auto RLRt(R);
 	DistMatrix<double> smallQ(*g);
 	DistMatrix<double> newL(*g);
@@ -352,6 +378,7 @@ void NystromAlg::qr_orthog(){
 	R.Empty();
 
 	// Load combined Q into K_nm
+	if(print){std::cout << "load k_nm"<<std::endl;}
 	K_nm.Resize(ntrain,nystrom_rank);
 	Fill(K_nm,0.0);
 	Gemm(NORMAL,NORMAL, 1.0,Q_nm,smallQ, 1.0,K_nm);
@@ -359,6 +386,7 @@ void NystromAlg::qr_orthog(){
 	Q_nm.Empty();
 
 	//Load new L into D
+	if(print){std::cout << "load d"<<std::endl;}
 	D = newL;
 	newL.Empty();
 
@@ -470,30 +498,50 @@ void NystromAlg::appinv(DistMatrix<double,VC,STAR>& rhs, DistMatrix<double,VC,ST
 	Gemv(TRANSPOSE, 1.0,K_nm,rhs, 1.0,Kw);
 
 	if( r && r < nystrom_samples){
-		auto rKw(Kw);
-		auto rD(D);
+		//auto rKw(Kw);
+		//auto rD(D);
 
-		// TODO use getsubmatrix for safety
-		rD.Resize(r,1);
-		rKw.Resize(r,1);
+		//rD.Resize(r,1);
+		//rKw.Resize(r,1);
 
-		DiagonalSolve(LEFT,NORMAL,rD,rKw);
-		rD.Empty();
+		//DiagonalSolve(LEFT,NORMAL,rD,rKw);
+		//rD.Empty();
 
-		Fill(Kw,0.0);
-		DistMatrix<double> I(*g);
-		Identity(I,nystrom_samples,r); //TODO make better
-		Gemv(NORMAL, 1.0,I,rKw, 0.0,Kw);
-	}else{
+		//Fill(Kw,0.0);
+		//
+		////auto KwSub(Kw);
+		////View(Kw,KwSub,Range<int>(0,r),dummy_rng);
+		////Axpy(1.0,rKw,KwSub);
+
+		//DistMatrix<double> I(*g);
+		//Identity(I,nystrom_samples,r); 
+		//Gemv(NORMAL, 1.0,I,rKw, 0.0,Kw);
 		
-		// Scale by inv diag
+		//Print(Kw,"Before");
 		DiagonalSolve(LEFT,NORMAL,D,Kw);
+		DistMatrix<double> I(*g);
+		DistMatrix<double,VC,STAR> rKw(r,1,*g);
+		Fill(rKw,0.0);
+
+		Identity(I,r,nystrom_samples); 
+		Gemv(NORMAL, 1.0,I,Kw, 0.0,rKw);
+		
+		I.Empty();
+		Identity(I,nystrom_samples,r); 
+		Gemv(NORMAL, 1.0,I,rKw, 0.0,Kw);
+		//Print(Kw,"After");
+	
+	}else{
+		// Scale by inv diag
+		//Print(Kw,"Before");
+		DiagonalSolve(LEFT,NORMAL,D,Kw);
+		//Print(Kw,"After");
 	}
 	
 	// Finish multiply, load into x
 	x.Resize(ntrain,1);
 	Fill(x,0.0);
-	Gemv(NORMAL, 1.0,K_nm,Kw, 1.0,x);
+	Gemv(NORMAL, 1.0,K_nm,Kw, 0.0,x);
 
 	// Free the dummy vector
 	Kw.Empty();
