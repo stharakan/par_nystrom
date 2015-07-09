@@ -56,6 +56,12 @@ int main(int argc, char* argv []){
 	mpi::Barrier(mpi::COMM_WORLD);
 	if(print){Print(K,"Restrict");}
 
+	K.Empty();
+	Uniform(K,20,20);
+	DistMatrix<double> Umm(grid);
+	DistMatrix<double,VC,STAR> Lmm(grid);
+	HermitianEig(UPPER,K,Lmm,Umm,DESCENDING);
+
 	Finalize();
 	return 0;
 }
