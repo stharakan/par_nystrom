@@ -9,7 +9,7 @@ ASK_LIB = -L$(ASKIT_DIR)/build/ -laskit
 ASK_INC = -I$(ASKIT_DIR)/src/
 
 ALL_INCS = -I./ $(EL_LINK_FLAGS)  
-ALL_LIBS = -L./ $(EL_LIBS) $(NYST_INC)
+ALL_LIBS = -L./ $(EL_LIBS) 
 
 UTIL_OBJ = nystrom_utils.o
 UTIL_SRC = nystrom_utils.cpp
@@ -38,19 +38,19 @@ ALL_OBJS = $(MAIN_OBJ) $(GKERNEL_OBJ) $(NYST_OBJ) $(UTIL_OBJ)
 all : $(MAIN_BIN)
 
 $(MAIN_BIN) : $(ALL_OBJS)
-	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) $^ $(ALL_INCS) $(ALL_LIBS) -o $(MAIN_BIN)
+	$(CXX) $(EL_COMPILE_FLAGS) $^ $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
 $(MAIN_OBJ) : $(MAIN_SRC) $(MAIN_DEPS)
-	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(MAIN_SRC) $(ALL_INCS) $(ALL_LIBS) -o $@
+	$(CXX) $(EL_COMPILE_FLAGS) -c $< $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
 $(NYST_OBJ) : $(NYST_SRC) $(NYST_DEPS)
-	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(NYST_SRC) $(ALL_INCS) $(ALL_LIBS) -o $@
+	$(CXX) $(EL_COMPILE_FLAGS) -c $< $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
 $(GKERNEL_OBJ) : $(GKERNEL_SRC) $(GKERNEL_DEPS)
-	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(GKERNEL_SRC) $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
+	$(CXX) $(EL_COMPILE_FLAGS) -c $< $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
 $(UTIL_OBJ) : $(UTIL_SRC) $(UTIL_DEP)
-	$(CXX) $(EL_COMPILE_FLAGS) $(CPP_FLAGS) -c $(UTIL_SRC) $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
+	$(CXX) $(EL_COMPILE_FLAGS) -c $< $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
 el2petsc : $(ELPSC_BIN)
 
