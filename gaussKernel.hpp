@@ -1,6 +1,6 @@
 #include "El.hpp"
 #include "math.h"
-#include "omp.h"
+//#include "omp.h"
 //#include "kernel_inputs.hpp"
 #include <iostream>
 #include <functional>
