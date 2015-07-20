@@ -2,34 +2,32 @@
 module load impi
 
 EMAIL=sameer@ices.utexas.edu
+FIN=
 N=500000
 NODES=2
 
-for TASKS_PER_NODE in 20
+for TASKS_PER_NODE in 1 2 8 10
 do
 TOT_TASKS=$((NODES*TASKS_PER_NODE))
 for RANK in 5000 
 do
 cat <<EOS | sbatch
 #!/bin/bash
-##SBATCH -J $TASKS_PER_NODE.$NODES          # job name
-##SBATCH -o vec.n$NODES.t$TASKS_PER_NODE.out       # output and error file name (%j expands to jobID)
-#SBATCH -J heig$RANK          # job name
-#SBATCH -o heig_test.r$RANK.out       # output and error file name (%j expands to jobID)
+#SBATCH -J $TASKS_PER_NODE.$NODES          # job name
+#SBATCH -o all.n$NODES.t$TASKS_PER_NODE.out       # output and error file name (%j expands to jobID)
+##SBATCH -o all.$TASKS_PER_NODE          # job name
 #SBATCH -n $TOT_TASKS          # total number of mpi tasks requested
 #SBATCH -N $NODES          # total number of nodes (2 sockets / node)
 #SBATCH -p gpu             # queue (partition) -- normal, development, etc.
 #SBATCH -t 00:30:00        # run time (hh:mm:ss) - 1.5 hours
 #SBATCH -A PADAS           # Project
 #SBATCH --mail-user=$EMAIL
-#SBATCH --mail-type=end    # email me when the job finishes
 
+cd ${WORK}/research/par_nystrom
+ibrun ./test_allocate.exe --w 4096 --h 100000 --ws 100 --hs 100 --p false
 
-#cd ${WORK}/research/par_nystrom
-#ibrun ./test_allocate.exe 
-
-cd ${WORK}/downloads/Elemental/examples/lapack_like/
-ibrun ./Heig --size $RANK
+#cd ${WORK}/downloads/Elemental/examples/lapack_like/
+#ibrun ./Heig --size $RANK
 EOS
 
 done #RANK for loop
