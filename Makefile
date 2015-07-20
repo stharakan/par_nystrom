@@ -1,6 +1,5 @@
 include $(EL_DIR)/conf/ElVars
-
-CPP_FLAGS = -openmp -O3 -std=c++11  
+CPP_FLAGS = -O3 -std=c++11  
 
 PSC_INC = -I$(PETSC_DIR)/include
 PSC_LIB = -L$(PETSC_DIR)/lib -lpetsc
@@ -8,8 +7,11 @@ PSC_LIB = -L$(PETSC_DIR)/lib -lpetsc
 ASK_LIB = -L$(ASKIT_DIR)/build/ -laskit 
 ASK_INC = -I$(ASKIT_DIR)/src/
 
-ALL_INCS = -I./ $(EL_LINK_FLAGS)  
-ALL_LIBS = -L./ $(EL_LIBS) 
+NYST_LIB = -L$(NYST_DIR) -lnystrom
+NYST_INC = -I$(NYST_DIR)
+
+ALL_INCS =  $(EL_LINK_FLAGS) $(NYST_INC)
+ALL_LIBS =  $(EL_LIBS) $(NYST_LIB)
 
 UTIL_OBJ = nystrom_utils.o
 UTIL_SRC = nystrom_utils.cpp
@@ -26,31 +28,34 @@ GKERNEL_DEPS = gaussKernel.hpp kernel_inputs.hpp
 NYST_OBJ = nystrom_alg.o
 NYST_SRC = nystrom_alg.cpp
 NYST_DEPS = nystrom_alg.hpp nystrom_utils.hpp
-MAIN_BIN = nystrom.exe
-MAIN_OBJ = nystrom_tests.o
-MAIN_SRC = nystrom_tests.cpp
-MAIN_DEPS = nystrom_alg.hpp nystrom_utils.hpp kernel_inputs.hpp
+NYST_SO = libnystrom.so
+TEST_BIN = nystrom.exe
+TEST_OBJ = nystrom_tests.o
+TEST_SRC = nystrom_tests.cpp
+TEST_DEPS = nystrom_alg.hpp nystrom_utils.hpp kernel_inputs.hpp
 
 
 
-ALL_OBJS = $(MAIN_OBJ) $(GKERNEL_OBJ) $(NYST_OBJ) $(UTIL_OBJ)
+NYST_OBJS = $(GKERNEL_OBJ) $(NYST_OBJ) $(UTIL_OBJ)
 
-all : $(MAIN_BIN)
+all : $(NYST_SO)
 
-$(MAIN_BIN) : $(ALL_OBJS)
-	$(CXX) $(EL_COMPILE_FLAGS) $^ $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
-
-$(MAIN_OBJ) : $(MAIN_SRC) $(MAIN_DEPS)
-	$(CXX) $(EL_COMPILE_FLAGS) -c $< $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
+$(NYST_SO) : $(NYST_OBJS)
+	$(CXX) $(EL_COMPILE_FLAGS) -shared $^ $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
 $(NYST_OBJ) : $(NYST_SRC) $(NYST_DEPS)
-	$(CXX) $(EL_COMPILE_FLAGS) -c $< $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
+	$(CXX) $(EL_COMPILE_FLAGS) -fPIC -c $< $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
 $(GKERNEL_OBJ) : $(GKERNEL_SRC) $(GKERNEL_DEPS)
-	$(CXX) $(EL_COMPILE_FLAGS) -c $< $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
+	$(CXX) $(EL_COMPILE_FLAGS) -fPIC -c $< $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
 
 $(UTIL_OBJ) : $(UTIL_SRC) $(UTIL_DEP)
-	$(CXX) $(EL_COMPILE_FLAGS) -c $< $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
+	$(CXX) $(EL_COMPILE_FLAGS) -fPIC -c $< $(EL_LINK_FLAGS) $(EL_LIBS) -o $@
+
+tests : $(TEST_BIN)
+
+$(TEST_BIN) : $(TEST_SRC) 
+	$(CXX) $(EL_COMPILE_FLAGS) $< $(ALL_INCS) $(ALL_LIBS) -o $@
 
 el2petsc : $(ELPSC_BIN)
 
@@ -71,4 +76,5 @@ test_allocate.exe : allocate.cpp
 clean:
 	rm *.o
 	rm *.exe
+	rm $(NYST_SO)
 
