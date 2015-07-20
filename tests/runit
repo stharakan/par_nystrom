@@ -1,24 +1,38 @@
 #!/bin/bash
-module load impi
 
-EMAIL=sameer@ices.utexas.edu
-DATA_DIR=/work/00921/biros/maverick/data/machine_learning/
-DATA=cov
-TR_FILE=covtype.libsvm.trn.X.bin
-TR_LAB=covtype.libsvm.trn.y.bin
-N=500000
-D=54
+OUT_DIR=$NYST_DIR/tests
+
+DATA_DIR=$NYST_DIR/data/
+DATA=susy100k
+FILE_BASE=susy.100k.18d
+TR_FILE=$FILE_BASE.trn.X.bin
+TR_LABS=$FILE_BASE.trn.y.bin
+TE_FILE=$FILE_BASE.tst.X.bin
+TE_LABS=$FILE_BASE.tst.y.bin
+N=100000
+NTEST=100000
+D=18
+
+MULT=1
+
+
+R_FLAG=true
+TR_FLAG=true
+QR_FLAG=true
+TN_FLAG=true
+
+NP=5
 
 for SIG in 0.05
 do
-for RANK in 16384
+for RANK in 256
 do
 
-cd ${WORK}/research/par_nystrom
+SAMP=$((MULT*RANK))
 
-ibrun tacc_affinity ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LAB --ntrain $N --dim $D --sigma $SIG --rank $RANK
-EOS
+cd $NYST_DIR
+
+mpirun -np $NP ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LAB --ntrain $N --dim $D --sigma $SIG --rank $RANK > $OUT_DIR/$DATA.r$RANK.s$SIG.np$NP.out 2> $OUT_DIR/err.txt
 
 done #RANK for loop
 done #SIG for loop
-
