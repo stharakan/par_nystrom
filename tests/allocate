@@ -1,0 +1,18 @@
+#!/bin/bash
+
+OUT_DIR=$NYST_DIR/tests
+
+W=100
+H=100
+WSUB=50
+HSUB=50
+
+
+RANGE=true
+PRINT=false
+
+NP=5
+
+cd $NYST_DIR
+
+mpirun -np $NP ./test_allocate.exe --w $W --h $H --ws $WSUB --hs $HSUB --r $RANGE --p $PRINT > $OUT_DIR/$DATA.r$RANK.s$SAMP.np$NP.out 2> $OUT_DIR/err.txt
