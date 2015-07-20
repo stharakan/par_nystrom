@@ -57,7 +57,7 @@ int main(int argc, char* argv []){
 	if(print){Print(K,"Restrict");}
 
 	K.Empty();
-	Uniform(K,20,20);
+	Uniform(K,100,100);
 	DistMatrix<double> Umm(grid);
 	DistMatrix<double,VC,STAR> Lmm(grid);
 	HermitianEig(UPPER,K,Lmm,Umm,DESCENDING);
