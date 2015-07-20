@@ -1,0 +1,30 @@
+#!/bin/bash
+
+OUT_DIR=$NYST_DIR/regression_tests
+
+DATA_DIR=$NYST_DIR/data/
+DATA=susy100k
+FILE_BASE=susy.100k.18d
+TR_FILE=$FILE_BASE.trn.X.bin
+TR_LABS=$FILE_BASE.trn.y.bin
+TE_FILE=$FILE_BASE.tst.X.bin
+TE_LABS=$FILE_BASE.tst.y.bin
+N=100000
+NTEST=100000
+D=18
+
+SIG=0.35
+RANK=256
+SAMP=256
+
+
+R_FLAG=true
+TR_FLAG=true
+QR_FLAG=true
+TN_FLAG=true
+
+NP=5
+
+cd $NYST_DIR
+
+mpirun -np $NP ./nystrom.exe --dir $DATA_DIR --trdata $TR_FILE --trlabs $TR_LABS --tedata $TE_FILE --telabs $TE_LABS --ntrain $N --ntest $NTEST --dim $D --sigma $SIG --rank $RANK --samp $SAMP --rr $R_FLAG --tr $TR_FLAG --tn $TN_FLAG --qr $QR_FLAG > $OUT_DIR/$DATA.r$RANK.s$SAMP.np$NP.out 2> $OUT_DIR/err.txt
